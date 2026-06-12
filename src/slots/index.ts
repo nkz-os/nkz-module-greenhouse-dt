@@ -16,10 +16,12 @@
 import type { ModuleViewerSlots } from '@nekazari/sdk';
 import { greenhouseMapLayer } from './map-layer';
 import { greenhouseContextPanel } from './context-panel';
+import { greenhouseEntityTree } from './entity-tree';
 
 const slots: ModuleViewerSlots = {
   'map-layer': [greenhouseMapLayer],
   'context-panel': [greenhouseContextPanel],
+  'entity-tree': [greenhouseEntityTree],
 };
 
 export default slots;
