@@ -10,6 +10,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useViewer } from '@nekazari/viewer-kit';
+import { useTimelineContext } from '../contexts/TimelineContext';
 
 interface GreenhouseShellProps {
   greenhouseId: string;
@@ -47,6 +48,14 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
 }) => {
   const viewer = useViewer();
   const entitiesRef = useRef<Map<string, any>>(new Map());
+
+  // Handle missing TimelineProvider gracefully (may be rendered outside time-machine slot)
+  let timeline;
+  try {
+    timeline = useTimelineContext();
+  } catch {
+    timeline = null;
+  }
 
   useEffect(() => {
     if (!viewer) return;
@@ -142,6 +151,24 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       entities.set(`sensor-${sensor.id}`, sensorEntity);
     });
 
+    // 3.5 COG heatmap overlay (PNG with colormap from TimelineContext)
+    let heatmapLayer: any = null;
+    if (timeline?.displayUrl && timeline?.bounds && viewerInstance) {
+      const Cesium = (window as any).Cesium;
+      if (Cesium) {
+        heatmapLayer = viewerInstance.imageryLayers.addImageryProvider(
+          new Cesium.SingleTileImageryProvider({
+            url: timeline.displayUrl,
+            rectangle: Cesium.Rectangle.fromDegrees(
+              timeline.bounds[0], timeline.bounds[1],
+              timeline.bounds[2], timeline.bounds[3]
+            ),
+          })
+        );
+        heatmapLayer.alpha = 0.6;
+      }
+    }
+
     // 3. Render zone polygons (optional)
     zonePolygons.forEach((zone) => {
       if (!zone.coordinates?.length) return;
@@ -171,6 +198,11 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     });
 
     return () => {
+      // Cleanup heatmap overlay
+      if (heatmapLayer && !viewerInstance.isDestroyed()) {
+        viewerInstance.imageryLayers.remove(heatmapLayer);
+      }
+
       // Cleanup on unmount
       entities.forEach((entity, id) => {
         if (!viewerInstance.isDestroyed()) {
@@ -179,7 +211,7 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       });
       entities.clear();
     };
-  }, [viewer, greenhouseId, modelUrl, position, scale, sensors, zonePolygons, shellOpacity]);
+  }, [viewer, greenhouseId, modelUrl, position, scale, sensors, zonePolygons, shellOpacity, timeline?.displayUrl, timeline?.bounds]);
 
   // This component does not render DOM — it adds entities to Cesium
   return null;
