@@ -22,19 +22,26 @@ router = APIRouter(tags=["ngsi-ld"])
 
 
 def _extract_greenhouse_id(entity: dict) -> str | None:
-    """Extract greenhouse ID from sensor entity via relationships."""
-    # SDM standard: hasAgriParcel
-    hp = entity.get("hasAgriParcel", {})
-    if isinstance(hp, dict):
-        parcel_id = hp.get("object", "")
-        if isinstance(parcel_id, str) and parcel_id:
-            return parcel_id.split(":")[-1].rsplit("-", 1)[0] if "-" in parcel_id else parcel_id
-    # Legacy: refAgriParcel
-    rp = entity.get("refAgriParcel", {})
-    if isinstance(rp, dict):
-        parcel_id = rp.get("object", "")
-        if isinstance(parcel_id, str) and parcel_id:
-            return parcel_id.split(":")[-1].rsplit("-", 1)[0] if "-" in parcel_id else parcel_id
+    """Extract greenhouse ID from sensor entity via relationships.
+
+    Sensors link to zone parcels via refAgriParcel/hasAgriParcel.
+    Zone parcels are named {greenhouse_id}-zone-{quadrant}, so
+    we extract the prefix before "-zone-".
+    """
+    for rel_key in ("hasAgriParcel", "refAgriParcel"):
+        rel = entity.get(rel_key, {})
+        if not isinstance(rel, dict):
+            continue
+        parcel_id = rel.get("object", "")
+        if not isinstance(parcel_id, str) or not parcel_id:
+            continue
+        zone_id = parcel_id.split(":")[-1]
+        # Zone format: {greenhouse_id}-zone-{quadrant}
+        if "-zone-" in zone_id:
+            return zone_id.split("-zone-")[0]
+        # Direct parcel reference (not a zone) — cannot derive greenhouse
+        logger.debug("Parcel %s is not a zone entity, skipping greenhouse extraction", zone_id)
+        return None
     return None
 
 
@@ -52,9 +59,8 @@ async def ngsi_ld_notify(request: Request):
     if not isinstance(data, list):
         return JSONResponse(status_code=400, content={"error": "expected data array"})
 
-    # Extract tenant from subscription ID
-    sub_id = payload.get("id", "")
-    tenant_id = sub_id.rsplit("-", 1)[-1] if "-" in sub_id else ""
+    # Extract tenant from NGSILD-Tenant header (Orion-LD includes it in callbacks)
+    tenant_id = request.headers.get("NGSILD-Tenant", "")
 
     queued = 0
     for entity in data:

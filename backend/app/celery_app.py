@@ -30,6 +30,9 @@ def _make_celery_app() -> Celery:
         task_time_limit=120,
         task_soft_time_limit=90,
     )
+    # Task imports for worker auto-discovery (worker pod needs this)
+    app.conf.imports = ["app.workers.pathological"]
+
     # No beat schedule for Phase 2 — workers triggered by NGSI-LD subscription
     return app
 
