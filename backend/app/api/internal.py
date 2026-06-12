@@ -9,9 +9,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+import logging
+
 from app.config import settings
 from app.core.orion import get_orion_client, build_greenhouse_entity, build_zone_entity
+from app.core.subscriptions import ensure_pathological_subscription
 from app.middleware.auth import verify_internal_secret
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -86,14 +91,19 @@ async def setup_parcel(
         try:
             client.create_entity(zone_entity)
             zones.append(f"urn:ngsi-ld:AgriParcel:{zone_id}")
-        except Exception:
-            pass  # Zone may already exist — idempotent
+        except Exception as e:
+            err_str = str(e).lower()
+            if "already exists" in err_str or "conflict" in err_str:
+                logger.debug("Zone %s already exists", zone_id)
+            else:
+                logger.warning("Failed to create zone %s: %s", zone_id, e)
     
     # 3. Create NGSI-LD subscription for pathological monitoring
-    from app.core.subscriptions import ensure_pathological_subscription
-
     sub_id = await ensure_pathological_subscription(tenant_id)
     subscriptions = [sub_id] if sub_id else []
+
+    # Determine setup_status: ok only if greenhouse entity created + subscription exists
+    setup_status = "ok" if subscriptions else "degraded"
 
     # 4. IoT Agent device provisioning (stub — MVP logs instead of provisioning)
     
@@ -102,5 +112,5 @@ async def setup_parcel(
         "zones": zones,
         "subscriptions": subscriptions,
         "iot_devices_provisioned": 0,
-        "setup_status": "ok",
+        "setup_status": setup_status,
     }

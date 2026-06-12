@@ -46,11 +46,14 @@ def build_greenhouse_entity(
     orientation: Optional[str] = None,
 ) -> dict:
     """Build an AgriGreenhouse NGSI-LD entity payload.
-    
-    Uses SDM standard attributes. NOTE: refAgriGreenhouse is legacy;
+
+    NOTE: @context is mandatory in the body because SyncOrionClient.create_entity()
+    sends Content-Type: application/ld+json but does NOT inject @context.
+    Uses SDM standard attributes. refAgriGreenhouse is legacy;
     new code uses hasAgriParcel for child relationships.
     """
     entity = {
+        "@context": settings.context_url,
         "id": f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}",
         "type": "AgriGreenhouse",
         "name": {"type": "Property", "value": name},
@@ -91,11 +94,14 @@ def build_zone_entity(
     area: Optional[float] = None,
 ) -> dict:
     """Build an AgriParcel zone entity linked to a greenhouse.
-    
+
+    NOTE: @context is mandatory in the body because SyncOrionClient.create_entity()
+    sends Content-Type: application/ld+json but does NOT inject @context.
     Uses hasAgriParcel relationship (SDM standard), with refAgriGreenhouse
     as legacy fallback for backward compatibility during migration.
     """
     entity = {
+        "@context": settings.context_url,
         "id": f"urn:ngsi-ld:AgriParcel:{zone_id}",
         "type": "AgriParcel",
         "name": {"type": "Property", "value": name},
