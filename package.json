@@ -12,8 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@nekazari/sdk": "^2.0.0",
-    "@nekazari/viewer-kit": "^0.2.0-alpha.0",
+    "@nekazari/sdk": "^1.1.4",
+    "@nekazari/viewer-kit": "^0.1.1-alpha.0",
     "@nekazari/ui-kit": "^1.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
