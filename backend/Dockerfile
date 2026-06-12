@@ -2,6 +2,12 @@
 # backend/Dockerfile
 FROM python:3.12-slim
 
+# rasterio/ GDAL runtime dependencies
+# Runtime deps for rasterio (bundled GDAL wheels)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd -m -u 1000 appuser
 
 WORKDIR /app

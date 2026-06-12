@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:4ebd4422c0f27c974a9bbfb833d289d8a4e29b08a9306c462be5ba2433594d37
+          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:35fd2e7f5507a373b9437b78a2467c4539261d4cc5d53141d9535918217d0ecd
           command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=info"]
           env:
             - name: ORION_LD_URL
@@ -35,7 +35,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: internal-service-secret
-                  key: secret
+                  key: INTERNAL_SERVICE_SECRET
           startupProbe:
             exec:
               command: ["pgrep", "-f", "celery"]
