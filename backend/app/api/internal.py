@@ -57,6 +57,7 @@ async def setup_parcel(
         cover_type=config.get("cover_type", "polyethylene"),
         orientation=config.get("orientation", "N-S"),
         area=config.get("area_sqm"),
+        height=config.get("height"),
     )
     gh_entity["hasAgriParcel"] = {
         "type": "Relationship",

@@ -42,6 +42,7 @@ def build_greenhouse_entity(
     location: Optional[dict] = None,
     ref_agri_farm: Optional[str] = None,
     area: Optional[float] = None,
+    height: Optional[float] = None,
     cover_type: Optional[str] = None,
     orientation: Optional[str] = None,
 ) -> dict:
@@ -76,6 +77,9 @@ def build_greenhouse_entity(
     
     if area is not None:
         entity["area"] = {"type": "Property", "value": area, "unitCode": "MTK"}
+    
+    if height is not None:
+        entity["height"] = {"type": "Property", "value": height, "unitCode": "MT"}
     
     if cover_type:
         entity["coverType"] = {"type": "Property", "value": cover_type}

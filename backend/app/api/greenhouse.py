@@ -39,6 +39,8 @@ async def list_greenhouses(
             hasAgriParcel=e.get("hasAgriParcel", {}).get("object") if isinstance(e.get("hasAgriParcel"), dict) else None,
             area=e.get("area", {}).get("value") if isinstance(e.get("area"), dict) else None,
             coverType=e.get("coverType", {}).get("value") if isinstance(e.get("coverType"), dict) else None,
+            height=e.get("height", {}).get("value") if isinstance(e.get("height"), dict) else None,
+            orientation=e.get("orientation", {}).get("value") if isinstance(e.get("orientation"), dict) else None,
         ))
     return result
 
@@ -63,6 +65,11 @@ async def get_greenhouse(
         description=entity.get("description", {}).get("value") if isinstance(entity.get("description"), dict) else entity.get("description"),
         location=entity.get("location", {}).get("value") if isinstance(entity.get("location"), dict) else None,
         area=entity.get("area", {}).get("value") if isinstance(entity.get("area"), dict) else None,
+        height=entity.get("height", {}).get("value") if isinstance(entity.get("height"), dict) else None,
+        coverType=entity.get("coverType", {}).get("value") if isinstance(entity.get("coverType"), dict) else None,
+        orientation=entity.get("orientation", {}).get("value") if isinstance(entity.get("orientation"), dict) else None,
+        refAgriFarm=entity.get("refAgriFarm", {}).get("object") if isinstance(entity.get("refAgriFarm"), dict) else None,
+        hasAgriParcel=entity.get("hasAgriParcel", {}).get("object") if isinstance(entity.get("hasAgriParcel"), dict) else None,
     )
 
 
@@ -145,10 +152,17 @@ async def get_greenhouse_state(
     # Get sensors for each zone
     zones_state = []
     for zone_uri in zone_uris:
+        # Try new relationship name first
         sensors = client.query_entities(
             type="AgriSensor",
-            q=f"refAgriParcel==\"{zone_uri}\"",
+            q=f"hasAgriParcel==\"{zone_uri}\"",
         )
+        if not sensors:
+            # Fallback to legacy refAgriParcel
+            sensors = client.query_entities(
+                type="AgriSensor",
+                q=f"refAgriParcel==\"{zone_uri}\"",
+            )
         
         zone_sensors = []
         for s in sensors:

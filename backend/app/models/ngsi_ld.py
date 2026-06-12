@@ -37,6 +37,7 @@ class AgriGreenhouseCreate(BaseModel):
     name: str
     description: Optional[str] = None
     location: dict  # GeoJSON geometry
+    height: Optional[float] = None  # meters, for volume calculations
     refAgriFarm: Optional[str] = None
     hasAgriParcel: Optional[list[str]] = None
     area: Optional[float] = None
@@ -55,6 +56,7 @@ class AgriGreenhouseResponse(BaseModel):
     location: Optional[dict] = None
     refAgriFarm: Optional[str] = None
     hasAgriParcel: Optional[list[str]] = None
+    height: Optional[float] = None
     area: Optional[float] = None
     coverType: Optional[str] = None
     orientation: Optional[str] = None
