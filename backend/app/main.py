@@ -94,6 +94,10 @@ def create_app() -> FastAPI:
     from app.api.greenhouse import router as greenhouse_router
     app.include_router(greenhouse_router, prefix=settings.api_prefix)
     
+    # Internal routes (at /api/internal, not under api_prefix)
+    from app.api.internal import router as internal_router
+    app.include_router(internal_router, prefix="/api/internal")
+    
     return app
 
 
