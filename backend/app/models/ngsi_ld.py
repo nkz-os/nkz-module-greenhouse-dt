@@ -61,6 +61,8 @@ class AgriGreenhouseResponse(BaseModel):
     ventilationType: Optional[str] = None
     shadingType: Optional[str] = None
     heatingType: Optional[str] = None
+    rowSpacing: Optional[float] = None
+    plantDensity: Optional[float] = None
 
 
 # ── AgriSensor (for internal sensors) ─────────────────────────────────────────
@@ -78,7 +80,8 @@ class AgriSensorState(BaseModel):
     solarIrradiance: Optional[float] = None
     co2: Optional[float] = None
     batteryLevel: Optional[float] = None
-    lastSeen: Optional[datetime] = None
+    dateObserved: Optional[datetime] = None
+    hasDevice: Optional[str] = None
     location: Optional[dict] = None  # GeoJSON Point
 
 
@@ -122,3 +125,4 @@ class GreenhouseZone(BaseModel):
     area: Optional[float] = None
     location: Optional[dict] = None
     hasAgriCrop: Optional[str] = None
+    hasAgriGreenhouse: Optional[str] = None  # or legacy refAgriGreenhouse
