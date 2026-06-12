@@ -98,6 +98,10 @@ def create_app() -> FastAPI:
     from app.api.internal import router as internal_router
     app.include_router(internal_router, prefix="/api/internal")
     
+    # NGSI-LD subscription notification (called by Orion-LD, no JWT)
+    from app.api.notify import router as notify_router
+    app.include_router(notify_router)
+
     return app
 
 
