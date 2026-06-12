@@ -9,7 +9,6 @@ happens in the notify handler.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from nkz_platform_sdk import OrionClient
@@ -53,8 +52,8 @@ async def ensure_pathological_subscription(tenant_id: str) -> str | None:
 
         callback_url = f"http://greenhouse-bff:8430{NOTIFY_PATH}"
         body = _subscription_body(callback_url)
-        result = await client.create_subscription(body)
-        sub_id = result.get("id", "")
+        location = await client.create_subscription(body)  # Returns Location header
+        sub_id = location.rstrip("/").split("/")[-1] if location else ""
         logger.info("Created pathological subscription %s for tenant %s", sub_id, tenant_id)
         return sub_id
     except Exception as e:
