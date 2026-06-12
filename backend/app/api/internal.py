@@ -5,6 +5,7 @@ Called by entity-manager during parcel activation flow.
 Authenticated by X-Internal-Service-Secret (NOT tenant JWT).
 """
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -89,15 +90,18 @@ async def setup_parcel(
         except Exception:
             pass  # Zone may already exist — idempotent
     
-    # 3. Create subscriptions (stub — Phase 2 adds full subscriptions)
-    # Subscriptions for telemetry will be created via SubscriptionRegistrar from SDK
-    
+    # 3. Create NGSI-LD subscription for pathological monitoring
+    from app.core.subscriptions import ensure_pathological_subscription
+
+    sub_id = asyncio.run(ensure_pathological_subscription(tenant_id))
+    subscriptions = [sub_id] if sub_id else []
+
     # 4. IoT Agent device provisioning (stub — MVP logs instead of provisioning)
     
     return {
         "greenhouse_id": gh_urn,
         "zones": zones,
-        "subscriptions": [],
+        "subscriptions": subscriptions,
         "iot_devices_provisioned": 0,
         "setup_status": "ok",
     }
