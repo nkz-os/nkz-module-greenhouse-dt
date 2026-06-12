@@ -94,7 +94,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build module bundle
-        run: pnpm run build
+        run: pnpm run build:module
         env:
           NKZ_VERSION_HASH: ${{ github.sha }}
 

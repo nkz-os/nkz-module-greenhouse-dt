@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "build:module": "vite build"
+    "build:module": "vite build && node tools/generate-manifest.mjs"
   },
   "dependencies": {
     "@nekazari/sdk": "^1.1.4",
