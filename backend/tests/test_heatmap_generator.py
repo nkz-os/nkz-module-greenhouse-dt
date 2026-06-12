@@ -76,6 +76,8 @@ class TestUploadHeatmap:
             timestamp="2026-06-12T14:30:00",
             png_bytes=png_bytes,
             cog_bytes=cog_bytes,
+            bounds=[-1.66, 42.81, -1.64, 42.83],
+            stats={"min": 20.0, "max": 38.0},
             minio_endpoint="http://minio:9000",
             minio_bucket="nekazari-data",
             minio_access_key="minio",
@@ -84,7 +86,9 @@ class TestUploadHeatmap:
 
         assert result["display_url"].endswith(".png")
         assert result["cog_url"].endswith(".tif")
-        assert mock_client.put_object.call_count == 2
+        assert result["bounds"] == [-1.66, 42.81, -1.64, 42.83]
+        assert result["stats"] == {"min": 20.0, "max": 38.0}
+        assert mock_client.put_object.call_count == 3
 
     @patch("app.services.heatmap_generator.boto3")
     def test_cached_heatmap(self, mock_boto3):
@@ -92,6 +96,14 @@ class TestUploadHeatmap:
         mock_client = MagicMock()
         mock_client.head_object.side_effect = [MagicMock(), MagicMock()]
         mock_boto3.session.Session.return_value.client.return_value = mock_client
+
+        import json
+
+        # Mock meta file response
+        meta_data = json.dumps({"bounds": [-1.66, 42.81, -1.64, 42.83], "stats": {"min": 20.0, "max": 38.0}})
+        mock_body = MagicMock()
+        mock_body.read.return_value = meta_data.encode()
+        mock_client.get_object.return_value = {"Body": mock_body}
 
         result = get_cached_heatmap_urls(
             tenant_id="demo",
@@ -107,6 +119,8 @@ class TestUploadHeatmap:
         assert result is not None
         assert result["display_url"].endswith(".png")
         assert result["cog_url"].endswith(".tif")
+        assert result["bounds"] == [-1.66, 42.81, -1.64, 42.83]
+        assert result["stats"] == {"min": 20.0, "max": 38.0}
 
     @patch("app.services.heatmap_generator.boto3")
     def test_cached_heatmap_missing(self, mock_boto3):

@@ -94,9 +94,10 @@ async def reconstruct_state(
             "timestamp": timestamp,
             "variable": variable,
             "sensor_count": len(sensors),
-            **cached,
-            "bounds": None,
-            "stats": None,
+            "display_url": cached["display_url"],
+            "cog_url": cached["cog_url"],
+            "bounds": cached.get("bounds"),
+            "stats": cached.get("stats"),
             "detail": "cached",
         }
 
@@ -111,9 +112,9 @@ async def reconstruct_state(
         try:
             readings = await ts_client.query(
                 entity_id=sensor_id,
-                attr_name=variable,
-                from_date=timestamp,
-                to_date=timestamp,
+                attribute=variable,
+                since=timestamp,
+                until=timestamp,
                 limit=1,
             )
         except Exception as exc:
@@ -169,6 +170,7 @@ async def reconstruct_state(
         upload_heatmap,
         tenant_id, greenhouse_id, variable, timestamp,
         png_bytes, cog_bytes,
+        grid_result["bounds"], grid_result["stats"],
         settings.minio_endpoint, settings.minio_bucket,
         settings.minio_access_key, settings.minio_secret_key,
     )

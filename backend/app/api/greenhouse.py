@@ -90,6 +90,7 @@ async def create_greenhouse(
         ref_agri_farm=body.refAgriFarm,
         area=body.area,
         cover_type=body.coverType,
+        height=body.height,
         orientation=body.orientation,
     )
     

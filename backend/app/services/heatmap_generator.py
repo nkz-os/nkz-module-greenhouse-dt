@@ -6,6 +6,7 @@ Uploads both to MinIO with deterministic keys.
 from __future__ import annotations
 
 import io
+import json
 import logging
 from typing import Any, Optional
 
@@ -122,14 +123,16 @@ def upload_heatmap(
     timestamp: str,
     png_bytes: bytes,
     cog_bytes: bytes,
+    bounds: list[float],
+    stats: dict[str, Any],
     minio_endpoint: str,
     minio_bucket: str,
     minio_access_key: str,
     minio_secret_key: str,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Upload both PNG and COG to MinIO.
 
-    Returns: {display_url, cog_url}
+    Returns: {display_url, cog_url, bounds, stats}
     """
     session = boto3.session.Session(
         aws_access_key_id=minio_access_key,
@@ -159,10 +162,24 @@ def upload_heatmap(
         ContentType="image/tiff",
     )
 
+    # Store metadata (bounds + stats) alongside heatmap
+    metadata = {
+        "bounds": bounds,
+        "stats": stats,
+        "variable": variable,
+        "timestamp": timestamp,
+    }
+    client.put_object(
+        Bucket=minio_bucket,
+        Key=f"{base_key}.meta.json",
+        Body=json.dumps(metadata),
+        ContentType="application/json",
+    )
+
     display_url = f"{minio_endpoint}/{minio_bucket}/{base_key}.png"
     cog_url = f"{minio_endpoint}/{minio_bucket}/{base_key}.tif"
 
-    return {"display_url": display_url, "cog_url": cog_url}
+    return {"display_url": display_url, "cog_url": cog_url, "bounds": bounds, "stats": stats}
 
 
 def get_cached_heatmap_urls(
@@ -174,10 +191,10 @@ def get_cached_heatmap_urls(
     minio_bucket: str,
     minio_access_key: str,
     minio_secret_key: str,
-) -> Optional[dict[str, str]]:
+) -> Optional[dict[str, Any]]:
     """Check if both PNG and COG exist in MinIO.
 
-    Returns: {display_url, cog_url} or None if missing
+    Returns: {display_url, cog_url, bounds, stats} or None if missing
     """
     session = boto3.session.Session(
         aws_access_key_id=minio_access_key,
@@ -200,7 +217,16 @@ def get_cached_heatmap_urls(
                 return None
             raise
 
+    # Read metadata (bounds + stats)
+    try:
+        meta_obj = client.get_object(Bucket=minio_bucket, Key=f"{base_key}.meta.json")
+        meta = json.loads(meta_obj["Body"].read())
+    except (ClientError, json.JSONDecodeError):
+        meta = {}
+
     return {
         "display_url": f"{minio_endpoint}/{minio_bucket}/{base_key}.png",
         "cog_url": f"{minio_endpoint}/{minio_bucket}/{base_key}.tif",
+        "bounds": meta.get("bounds"),
+        "stats": meta.get("stats"),
     }
