@@ -21,12 +21,17 @@ spec:
           image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:35fd2e7f5507a373b9437b78a2467c4539261d4cc5d53141d9535918217d0ecd
           command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=info"]
           env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
             - name: ORION_LD_URL
               value: "http://orion-ld-service:1026"
             - name: CELERY_BROKER_URL
-              value: "redis://redis-service:6379/1"
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/1"
             - name: CELERY_BACKEND_URL
-              value: "redis://redis-service:6379/2"
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/2"
             - name: TIMESERIES_READER_URL
               value: "http://timeseries-reader-service:5000"
             - name: CONTEXT_URL
