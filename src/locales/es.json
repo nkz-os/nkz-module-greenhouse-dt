@@ -32,5 +32,25 @@
     "humidity_heatmap": "Humedad",
     "dew_point_heatmap": "Riesgo de Condensación",
     "greenhouse_shell": "Estructura del Invernadero"
+  },
+  "time_machine": {
+    "title": "Máquina del Tiempo",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "rewind": "Último",
+    "loading": "Cargando...",
+    "temperature": "Temperatura",
+    "humidity": "Humedad",
+    "leaf_wetness": "Humedad Foliar",
+    "co2": "CO₂",
+    "par": "PAR",
+    "solar_irradiance": "Radiación Solar",
+    "last_72h": "Últimas 72 horas",
+    "sensors": "sensores",
+    "min": "Mín: {value}",
+    "max": "Máx: {value}",
+    "mean": "Prom: {value}",
+    "no_data": "Sin datos en este instante",
+    "insufficient_sensors": "Sensores insuficientes para interpolar"
   }
 }

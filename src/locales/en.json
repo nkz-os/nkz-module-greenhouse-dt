@@ -32,5 +32,25 @@
     "humidity_heatmap": "Humidity",
     "dew_point_heatmap": "Dew Point Risk",
     "greenhouse_shell": "Greenhouse Structure"
+  },
+  "time_machine": {
+    "title": "Time Machine",
+    "play": "Play",
+    "pause": "Pause",
+    "rewind": "Latest",
+    "loading": "Loading...",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "leaf_wetness": "Leaf Wetness",
+    "co2": "CO₂",
+    "par": "PAR",
+    "solar_irradiance": "Solar Irradiance",
+    "last_72h": "Last 72 hours",
+    "sensors": "sensors",
+    "min": "Min: {value}",
+    "max": "Max: {value}",
+    "mean": "Avg: {value}",
+    "no_data": "No data at this timestamp",
+    "insufficient_sensors": "Insufficient sensors for interpolation"
   }
 }
