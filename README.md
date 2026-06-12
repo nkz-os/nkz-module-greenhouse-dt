@@ -1,229 +1,214 @@
-# Nekazari Module Template
+# Greenhouse Digital Twin — nkz-module-greenhouse-dt
 
-Starter template for building **external modules** for the Nekazari platform.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![FIWARE](https://img.shields.io/badge/FIWARE-NGSI--LD-orange)](https://fiware.github.io/data-models/)
+[![Nekazari](https://img.shields.io/badge/Nekazari-Module-6366f1)](https://github.com/nkz-os)
 
-Modules are built as **Module Federation 2.0 remotes** (`dist/remoteEntry.js` + `dist/mf-manifest.json` + `dist/assets/`) plus a `dist/manifest.json`. All are uploaded to MinIO and loaded at runtime by the host via `loadRemote()`. No build-time coupling to the host.
-
----
-
-## Quick start
-
-```bash
-git clone https://github.com/nkz-os/nkz-module-template.git my-module
-cd my-module
-pnpm install
-```
-
-Do a **find-and-replace** across the repo for these placeholders:
-
-| Placeholder | Example value | Where |
-|-------------|---------------|-------|
-| `MODULE_NAME` | `soil-sensor` | package.json (`name`, `nkz.moduleId`), Module.tsx (`id`), k8s/, SQL |
-| `MODULE_DISPLAY_NAME` | `Soil Sensor` | Module.tsx (`displayName`), locales/, k8s/, SQL |
-| `MODULE_ROUTE` | `/soil-sensor` | Module.tsx (`route`), SQL |
-| `YOUR_ORG` | `acme-corp` | k8s/backend-deployment.yaml, SQL |
-
-Then edit `src/Module.tsx` to declare your slots, accent colour, navigation entry, permissions, and data dependencies.
+Módulo de **Digital Twin para invernaderos** de la plataforma [Nekazari](https://nekazari.robotika.cloud). Proporciona monitorización 3D en tiempo real, alertas fitopatológicas predictivas, máquina del tiempo forense y control predictivo (auto-pilot) para AgriGreenhouses.
 
 ---
 
-## Structure
+## Funcionalidades
 
-```
-my-module/
-├── src/
-│   ├── Module.tsx              # SINGLE SOURCE OF TRUTH — defineModule({...})
-│   ├── App.tsx                 # Main page component (rendered at route)
-│   ├── main.tsx                # Dev-only entry (Vite) — wraps in MockProvider
-│   ├── slots/index.ts          # Declare which host slots you occupy
-│   ├── components/slots/       # Slot React components
-│   ├── locales/{en,es}.json    # i18n bundles
-│   └── types/                  # TypeScript types
-├── backend/                    # FastAPI backend (optional, delete if unused)
-├── k8s/
-│   ├── backend-deployment.yaml # K8s Deployment + Service for backend
-│   └── registration.sql        # Insert/update marketplace_modules
-├── vite.config.ts              # One-liner: defineConfig(nkzModulePreset())
-├── package.json                # nkz.moduleId points here
-└── dist/
-    ├── remoteEntry.js          # Federation remote entry
-    ├── mf-manifest.json        # Federation manifest (shared deps + exposes)
-    ├── manifest.json           # NKZ data manifest (auto-generated)
-    └── assets/                 # Sync + async chunks
-```
+### Fase 1 — MVP ✅
+- **Visualización 3D en Cesium** — Estructura del invernadero semitransparente con puntos de sensor coloreados por temperatura, integrada en el Unified Viewer vía slot `map-layer`
+- **Panel de estado en tiempo real** — Temperatura, humedad, VPD, alertas activas y agregados por zona en el slot `context-panel`
+- **API REST** — CRUD de entidades `AgriGreenhouse`, estado agregado por sensores, consulta de alertas
+- **Activación de parcela** — Flujo `POST /api/internal/setup-parcel` conforme al contrato de `entity-manager`
+- **Traducciones** — Español e inglés (32 claves cada uno)
+
+### Fase 2 — Alertas Fitopatológicas 🚧
+- Worker patológico (Celery) que monitoriza leaf wetness vía subscripción NGSI-LD
+- Creación automática de entidades `Alert` con severidad (low/medium/high/critical)
+- Notificaciones push
+
+### Fase 3 — Máquina del Tiempo 🚧
+- Reconstrucción de interpolación termodinámica desde TimescaleDB
+- Generación de COG heatmaps para superposición en Cesium
+- Timeline interactivo en el slot `bottom-panel`
+
+### Fase 4 — Auto-Pilot 🚧
+- MPC con lookahead de 2 horas usando surrogate model (ONNX)
+- Comandos idempotentes al IoT Agent (ventilación, sombreo, riego)
+- Guardarraíles validados contra `tenant_limits`
 
 ---
 
-## `defineModule()` — the single source of truth
+## Arquitectura
 
-Edit `src/Module.tsx`:
+```
+┌─────────────────────────────────────────────┐
+│              Unified Viewer (Cesium)         │
+│  map-layer ── shell semitransparente + sensores │
+│  context-panel ── estado + alertas + VPD       │
+│  entity-tree ── Agrilistado de Greenhouses      │
+└──────────────────────┬──────────────────────┘
+                       │
+              api-gateway (X-Tenant-ID)
+                       │
+         ┌─────────────┴─────────────┐
+         │                           │
+   greenhouse-bff              entity-manager
+   (FastAPI, :8430)           (activación)
+         │
+    ┌────┴────┐           ┌──────────┐
+    │ Celery  │           │ Orion-LD │
+    │ workers │◄──────────│ Context  │
+    │(v2-4)   │           │ Broker   │
+    └─────────┘           └────┬─────┘
+                               │
+                          IoT Agent
+                          (MQTT)
+```
 
-```tsx
-import { defineModule } from '@nekazari/module-kit';
-import { lazy } from 'react';
-import { moduleSlots } from './slots';
+### Stack
 
-const MainPage = lazy(() => import('./App'));
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React 18, TypeScript, CesiumJS, Module Federation 2.0 |
+| Backend | Python 3.12, FastAPI, nkz-platform-sdk |
+| Workers | Celery + Redis (Fases 2-4) |
+| Context Broker | Orion-LD (FIWARE NGSI-LD) |
+| Base de datos | TimescaleDB (series temporales), PostgreSQL (admin_platform) |
+| Almacenamiento | MinIO (modelos 3D, COG heatmaps) |
+| Contenedores | Docker, GitHub Container Registry |
+| Infra | Kubernetes, ArgoCD |
 
-export default defineModule({
-  id: 'soil-sensor',
-  displayName: 'Soil Sensor',
-  version: '1.0.0',
-  hostApiVersion: '^2.0.0',
-  accent: { base: '#A16207', soft: '#FEF3C7', strong: '#713F12' },
-  icon: 'sprout',
-  main: MainPage,
-  route: '/soil-sensor',
-  navigation: { section: 'modules', priority: 60 },
-  slots: moduleSlots,
-  api: { basePath: '/api/soil-sensor' },          // optional — only if backend
-  requiredRoles: ['Farmer', 'TenantAdmin'],
-  requiredPlan: 'basic',
-  data: {
-    entities: ['AgriParcel', 'AgriSoil'],         // CSP-of-data allowlist
-    timeseries: ['soil_observations'],
+---
+
+## Modelo de Datos (FIWARE Smart Data Models)
+
+### AgriGreenhouse
+
+```jsonld
+{
+  "id": "urn:ngsi-ld:AgriGreenhouse:greenhouse-42",
+  "type": "AgriGreenhouse",
+  "name": {"type": "Property", "value": "Invernadero Norte"},
+  "location": {"type": "GeoProperty", "value": {
+    "type": "Polygon",
+    "coordinates": [[[lon,lat], ...]]
+  }},
+  "hasAgriParcel": {
+    "type": "Relationship",
+    "object": ["urn:ngsi-ld:AgriParcel:gh-42-zone-NO", "..."]
   },
-});
+  "refAgriFarm": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:AgriFarm:farm-1"
+  },
+  "coverType": {"type": "Property", "value": "polyethylene"},
+  "area": {"type": "Property", "value": 500, "unitCode": "MTK"},
+  "orientation": {"type": "Property", "value": "N-S"}
+}
 ```
 
-The `dist/manifest.json` is auto-emitted from this declaration. You don't write it by hand.
+### Relaciones
+
+| Entidad | Relación | Destino | Estándar |
+|---------|----------|---------|----------|
+| `AgriGreenhouse` | `hasAgriParcel` | `AgriParcel` (zonas) | SDM |
+| `AgriGreenhouse` | `refAgriFarm` (legacy) → `hasAgriFarm` | `AgriFarm` | SDM |
+| `AgriParcel` (zona) | `refAgriGreenhouse` (legacy) → `hasAgriGreenhouse` | `AgriGreenhouse` | SDM |
+| `AgriSensor` | `refAgriParcel` (legacy) → `hasAgriParcel` | `AgriParcel` (zona) | SDM |
+| `AgriSensor` | `hasDevice` | `Device` | SDM |
+| `Alert` | `alertSource` | `AgriGreenhouse` | SDM |
+
+> **Nota:** Las relaciones `ref<Type>` son legacy. El módulo consulta tanto nombres nuevos como antiguos para compatibilidad durante la migración. El código nuevo usa nombres SDM estándar (`hasAgriParcel`, `hasDevice`, `hasAgriGreenhouse`).
 
 ---
 
-## Hooks — the only way to talk to the platform
+## Multitenancy
 
-All hooks from `@nekazari/module-kit` resolve inside the host (production) or against in-memory mocks (`pnpm run dev`).
+El módulo es **estrictamente multitenant**. Todas las operaciones se realizan en el contexto del tenant autenticado:
 
-```ts
-const { user, tenantId, roles, hasRole, hasPlan } = useAuth();
-const { t, lang, setLang } = useI18n();
-const { emit, on } = usePlatformEvents();              // namespaced to module:<id>:
-
-// NGSI-LD entities (CRUD + cache via TanStack Query)
-const { data: parcels } = useEntities('AgriParcel', { q: 'category=="vineyard"' });
-const { data: parcel } = useEntity('urn:ngsi-ld:AgriParcel:42');
-const { mutateAsync: createParcel } = useCreateEntity();
-
-// Timescale
-const { data: temps } = useTimeseries({
-  entityId: 'urn:ngsi-ld:WeatherObserved:station-1',
-  attribute: 'temperature',
-  from: new Date(Date.now() - 7 * 86400_000),
-  to: new Date(),
-});
-
-// File storage scoped to tenants/<tenant>/modules/<id>/
-const { upload, getUrl } = useFiles();
-const { url } = await upload(file, 'reports/2026/foo.pdf');
-
-// Your own backend (basePath from defineModule({ api }))
-const { data: forecast } = useGet<Forecast>('/forecast/today');
-const { mutateAsync: createOrder } = usePost<{ ok: boolean }, OrderBody>('/orders');
-```
-
-You never write `fetch`, never handle JWT cookies, never construct `Fiware-Service` headers.
+- Cada petición lleva `X-Tenant-ID` inyectado por el api-gateway
+- `OrionClient(tenant_id)` del SDK inyecta automáticamente `NGSILD-Tenant` y `Fiware-Service`
+- El endpoint `/internal/setup-parcel` se autentica con `X-Internal-Service-Secret` (no JWT de tenant)
+- Los límites de seguridad se validan contra `admin_platform.tenant_limits` (Fase 4)
 
 ---
 
-## Build
+## API
+
+### Endpoints Públicos (con autenticación de tenant)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/greenhouse` | Listar greenhouses del tenant |
+| `GET` | `/api/greenhouse/{id}` | Detalle de greenhouse |
+| `POST` | `/api/greenhouse` | Crear greenhouse |
+| `DELETE` | `/api/greenhouse/{id}` | Eliminar greenhouse |
+| `GET` | `/api/greenhouse/{id}/state` | Estado agregado por zonas |
+| `GET` | `/api/greenhouse/{id}/alerts` | Alertas activas |
+
+### Endpoints Internos (solo entity-manager)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/api/internal/setup-parcel` | Activar módulo para una parcela |
+
+---
+
+## Desarrollo
 
 ```bash
-pnpm run build
-# → dist/remoteEntry.js     (federation remote entry)
-# → dist/mf-manifest.json   (shared deps + exposes)
-# → dist/manifest.json      (NKZ metadata for host + gateway CSP)
-# → dist/assets/            (sync + async chunks)
-```
+# Backend
+cd backend
+pip install -r requirements.txt
+POSTGRES_URL="postgresql://..." INTERNAL_SERVICE_SECRET="..." uvicorn app.main:app --port 8430 --reload
 
-The `@nekazari/module-builder@^2.0.3` preset (`nkzModulePreset()`) configures Module Federation 2.0 via `@module-federation/vite`:
-- **Singleton shared deps** — `react`, `react-dom`, `react-router-dom`, `@nekazari/*`, `i18next`, `react-i18next` resolved by the host at runtime. Never bundle them.
-- **`src/Module.tsx`** → `export default defineModule({...})` is the single entry point. The builder auto-generates the federation expose.
-
----
-
-## Local development
-
-```bash
+# Frontend
+pnpm install
 pnpm run dev
-# Vite dev server at http://localhost:5003
-# Wraps the module in MockProvider — useAuth/useOrion/useFiles/etc. return
-# in-memory fixtures, no platform required.
 ```
 
-For integration with a real backend, set `VITE_PROXY_TARGET=https://your-api-domain` in `.env`.
+### Tests
 
----
-
-## Deploy
-
-Push to `main`. That's it.
-
-The included `.github/workflows/build-push.yml` handles everything via GitHub Actions:
-
-1. **Tests** — frontend typecheck + backend tests
-2. **Build** — `pnpm run build:module` produces `dist/`
-3. **Publish** — uploads to immutable `modules/MODULE_NAME/<git-sha>/` on MinIO, flips the live pointer
-
-The publish step uses **GitHub OIDC** for authentication:
-- Runner gets a signed JWT from `token.actions.githubusercontent.com`
-- `POST https://nkz.robotika.cloud/api/internal/modules/MODULE_NAME/publish`
-- No manual MinIO uploads. No `kubectl`. No database SQL.
-
-**Prerequisites (one-time, org-level — already done for nkz-os):**
-- Org secret `INTERNAL_SERVICE_SECRET` configured in GitHub Actions secrets
-- Module registered in `marketplace_modules` (one-time SQL `INSERT`)
-
----
-
-## Slots
-
-Edit `src/slots/index.ts` to register your components in host slots:
-
-```ts
-import { ExampleSlot } from '../components/slots/ExampleSlot';
-
-export const moduleSlots = {
-  'context-panel': [
-    { id: 'soil-sensor-panel', component: ExampleSlot, priority: 10 },
-  ],
-};
+```bash
+POSTGRES_URL="postgresql://test:test@localhost:5432/test" \
+INTERNAL_SERVICE_SECRET="test-secret" \
+python -m pytest backend/tests/ -v
 ```
 
-Available slot types:
+---
 
-| Slot | Where it renders |
-|------|-----------------|
-| `context-panel` | Side panel when an entity is selected |
-| `bottom-panel` | Tabbed panel at the bottom of the viewer |
-| `map-layer` | Overlay or toolbar button on the 3D map |
-| `layer-toggle` | Toggle entry in the layer panel |
-| `entity-tree` | Context menu in the entity tree |
-| `dashboard-widget` | Card in the tenant dashboard |
+## Despliegue
 
-The module-kit translates your `{id, component, priority}` entries into the runtime `SlotWidgetDefinition` shape automatically — `component` is the actual React reference, not a string.
+### Base de datos
+
+Registrar el módulo en el marketplace:
+
+```bash
+PGPOD=$(kubectl get pods -n nekazari -l app=postgresql -o jsonpath='{.items[0].metadata.name}')
+kubectl cp k8s/registration.sql nekazari/$PGPOD:/tmp/
+kubectl exec -n nekazari $PGPOD -- psql -U postgres -d admin_platform -f /tmp/registration.sql
+```
+
+### K8s
+
+```bash
+kubectl apply -f k8s/
+```
+
+### CI/CD
+
+El workflow `.github/workflows/build-push.yml` publica automáticamente el frontend en MinIO vía OIDC y la imagen backend en GHCR al pushear a `main`.
 
 ---
 
-## CSP-of-data (api-gateway enforcement)
+## Licencia
 
-When the bundle calls a platform API, the SDK injects `X-Module-Id`. The gateway reads it, fetches your module's `manifest.json` from MinIO, and validates that the requested `type=` (NGSI-LD) or hypertable (Timescale) appears in your declared `data.entities` / `data.timeseries`.
+**GNU Affero General Public License v3.0** — ver [LICENSE](LICENSE).
 
-- **No `data.entities` declared** → fail-open (legacy modules keep working).
-- **`data.entities: ['*']`** → wildcard, opt out of enforcement (not recommended).
-- **`data.entities: ['AgriParcel']`** → only `?type=AgriParcel` is allowed; anything else returns 403.
+Copyright 2026 nkz-os.
 
-Declare exactly what you need. This is the platform's lightweight defence-in-depth — no replacement for sandboxing.
+Este módulo se distribuye con la esperanza de que sea útil, pero SIN GARANTÍA ALGUNA; sin siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR.
 
 ---
 
-## Build rules (critical)
+## Atribuciones
 
-- **Keep `i18next@^23.11.0` and `react-i18next@^14.1.0`** — must match the host's singleton versions to avoid federation runtime version mismatch warnings.
-- **Never bundle shared deps** — React, ReactDOM, react-router-dom, `@nekazari/*`, i18next, react-i18next. They come from the host as federation singletons. Bundling creates two instances and breaks hooks.
-- **`main` wrapper pattern** — prefer wrapping `lazy(() => import('./App'))` in a regular function component for Suspense boundaries and context providers. See `nkz-module-vegetation-health/src/Module.tsx`.
-
----
-
-## License
-
-Apache-2.0 — you are free to license your derived module under any terms.
+- [FIWARE](https://www.fiware.org) — Context Broker y Smart Data Models
+- [CesiumJS](https://cesium.com/platform/cesiumjs/) — Visualización 3D geoespacial
+- [Nekazari Platform](https://nekazari.robotika.cloud) — Plataforma agrotech de código abierto
