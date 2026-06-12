@@ -16,20 +16,9 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import type { ReconstructionResult } from '../services/api';
 
 export type TimelineVariable = 'temperature' | 'humidity' | 'leafWetness' | 'co2' | 'par';
-
-export interface ReconstructionResult {
-  greenhouse_id: string;
-  timestamp: string;
-  variable: string;
-  sensor_count: number;
-  display_url: string | null;
-  cog_url: string | null;
-  bounds: [number, number, number, number] | null;
-  stats: { min: number; max: number; mean: number } | null;
-  detail?: string;
-}
 
 interface TimelineState {
   currentTime: Date;
@@ -76,14 +65,13 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
 
   const handleSetPlaying = useCallback((p: boolean) => {
     setPlaying(p);
-    setDirty(true);
   }, []);
 
   const handleSetReconstruction = useCallback((data: ReconstructionResult) => {
     setDisplayUrl(data.display_url);
     setCogUrl(data.cog_url);
     setStats(data.stats);
-    setBounds(data.bounds as [number, number, number, number] | null);
+    setBounds(data.bounds);
     setSensorCount(data.sensor_count);
     setDirty(false);
     setLoading(false);

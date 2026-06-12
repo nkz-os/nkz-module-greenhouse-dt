@@ -15,9 +15,11 @@ export default defineModule({
     timeseries: [
       'temperature',
       'relativeHumidity',
+      'humidity',
       'leafWetness',
       'solarIrradiance',
       'co2',
+      'par',
     ],
   },
   viewerSlots: () => import('./slots/index'),

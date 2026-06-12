@@ -17,11 +17,13 @@ import type { ModuleViewerSlots } from '@nekazari/sdk';
 import { greenhouseMapLayer } from './map-layer';
 import { greenhouseContextPanel } from './context-panel';
 import { greenhouseEntityTree } from './entity-tree';
+import { timeMachineSlot } from './time-machine';
 
 const slots: ModuleViewerSlots = {
   'map-layer': [greenhouseMapLayer],
   'context-panel': [greenhouseContextPanel],
   'entity-tree': [greenhouseEntityTree],
+  'bottom-panel': [timeMachineSlot],
 };
 
 export default slots;
