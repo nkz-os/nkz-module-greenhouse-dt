@@ -12,7 +12,7 @@ import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MockProvider fixtures={{ moduleId: 'MODULE_NAME' }}>
+    <MockProvider fixtures={{ moduleId: 'greenhouse-dt' }}>
       <App />
     </MockProvider>
   </React.StrictMode>,
