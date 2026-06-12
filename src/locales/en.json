@@ -1,15 +1,36 @@
 {
-  "module": {
-    "title": "MODULE_DISPLAY_NAME",
-    "tenant": "Tenant",
-    "notAuthenticated": "Not authenticated.",
-    "placeholder": "Replace this page with your module's main UI."
-  },
-  "slot": {
-    "authRequired": "Authentication required.",
-    "refreshAria": "Refresh",
-    "entity": "Entity:",
-    "user": "User:",
-    "placeholder": "Replace this component with your module's functionality."
+  "greenhouse": {
+    "title": "Greenhouse Digital Twin",
+    "list_title": "Greenhouses",
+    "no_greenhouses": "No greenhouses found",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "vpd": "VPD",
+    "leaf_wetness": "Leaf Wetness",
+    "co2": "CO₂",
+    "solar_irradiance": "Solar Irradiance",
+    "alerts": "Alerts",
+    "active_alerts": "Active Alerts",
+    "no_active_alerts": "No active alerts",
+    "zones": "Zones",
+    "sensors": "Sensors",
+    "status": "Status",
+    "last_seen": "Last seen",
+    "actions": "Actions",
+    "mpc_status": "Auto-Pilot",
+    "mpc_active": "Active",
+    "mpc_inactive": "Inactive",
+    "mpc_idle": "Idle",
+    "mpc_running": "Analyzing...",
+    "mpc_error": "Error",
+    "time_machine": "Time Machine",
+    "rewind": "Rewind",
+    "play": "Play",
+    "pause": "Pause",
+    "heatmap": "Heatmap",
+    "temperature_heatmap": "Temperature",
+    "humidity_heatmap": "Humidity",
+    "dew_point_heatmap": "Dew Point Risk",
+    "greenhouse_shell": "Greenhouse Structure"
   }
 }

@@ -1,15 +1,36 @@
 {
-  "module": {
-    "title": "MODULE_DISPLAY_NAME",
-    "tenant": "Tenant",
-    "notAuthenticated": "No autenticado.",
-    "placeholder": "Sustituye esta página por la UI principal de tu módulo."
-  },
-  "slot": {
-    "authRequired": "Autenticación requerida.",
-    "refreshAria": "Actualizar",
-    "entity": "Entidad:",
-    "user": "Usuario:",
-    "placeholder": "Sustituye este componente por la funcionalidad de tu módulo."
+  "greenhouse": {
+    "title": "Digital Twin de Invernadero",
+    "list_title": "Invernaderos",
+    "no_greenhouses": "No hay invernaderos",
+    "temperature": "Temperatura",
+    "humidity": "Humedad",
+    "vpd": "VPD",
+    "leaf_wetness": "Humedad Foliar",
+    "co2": "CO₂",
+    "solar_irradiance": "Radiación Solar",
+    "alerts": "Alertas",
+    "active_alerts": "Alertas Activas",
+    "no_active_alerts": "Sin alertas activas",
+    "zones": "Zonas",
+    "sensors": "Sensores",
+    "status": "Estado",
+    "last_seen": "Última conexión",
+    "actions": "Acciones",
+    "mpc_status": "Auto-Pilot",
+    "mpc_active": "Activo",
+    "mpc_inactive": "Inactivo",
+    "mpc_idle": "En espera",
+    "mpc_running": "Analizando...",
+    "mpc_error": "Error",
+    "time_machine": "Máquina del Tiempo",
+    "rewind": "Rebobinar",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "heatmap": "Mapa de Calor",
+    "temperature_heatmap": "Temperatura",
+    "humidity_heatmap": "Humedad",
+    "dew_point_heatmap": "Riesgo de Condensación",
+    "greenhouse_shell": "Estructura del Invernadero"
   }
 }
