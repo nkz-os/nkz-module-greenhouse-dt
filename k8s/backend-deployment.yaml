@@ -18,9 +18,9 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:35fd2e7f5507a373b9437b78a2467c4539261d4cc5d53141d9535918217d0ecd
+          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:7ab13c563f29a4052c7a8baa003d56cf551f30fdb4f2c4718ea4afb6df27ee5f
           ports:
-            - containerPort: 8430
+            - containerPort: 8420
               name: http
           env:
             - name: ORION_LD_URL
@@ -54,19 +54,19 @@ spec:
           startupProbe:
             httpGet:
               path: /health
-              port: 8430
+              port: 8420
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 15
           livenessProbe:
             httpGet:
               path: /health
-              port: 8430
+              port: 8420
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 8430
+              port: 8420
             periodSeconds: 20
           resources:
             requests:

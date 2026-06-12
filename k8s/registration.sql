@@ -15,7 +15,7 @@ INSERT INTO marketplace_modules (
     'version', '0.1.0',
     'icon', 'Sprout',
     'min_platform_version', '2.0.0',
-    'setup_parcel_url', 'http://greenhouse-dt-backend:8430/api/internal/setup-parcel',
+    'setup_parcel_url', 'http://greenhouse-dt-backend:8420/api/internal/setup-parcel',
     'entity_types', jsonb_build_array('AgriGreenhouse', 'AgriSensor', 'Alert'),
     'capabilities', jsonb_build_array(
       '3d_visualization',

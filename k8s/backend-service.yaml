@@ -8,6 +8,6 @@ spec:
   selector:
     app: greenhouse-dt-backend
   ports:
-    - port: 8430
-      targetPort: 8430
+    - port: 8420
+      targetPort: 8420
       name: http
