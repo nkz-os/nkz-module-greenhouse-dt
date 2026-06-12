@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend:latest
+          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:4ebd4422c0f27c974a9bbfb833d289d8a4e29b08a9306c462be5ba2433594d37
           ports:
             - containerPort: 8430
               name: http
@@ -51,17 +51,22 @@ spec:
                   key: secret-key
             - name: CORS_ORIGINS
               value: "https://nekazari.robotika.cloud,http://localhost:3000"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8430
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 15
           livenessProbe:
             httpGet:
               path: /health
               port: 8430
-            initialDelaySeconds: 10
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /readyz
               port: 8430
-            initialDelaySeconds: 15
             periodSeconds: 20
           resources:
             requests:
