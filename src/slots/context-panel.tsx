@@ -14,7 +14,7 @@ import type { SlotWidgetDefinition } from '@nekazari/sdk';
 import { greenhouseApi, GreenhouseState, Alert } from '../services/api';
 
 const GreenhouseContextPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('greenhouse-dt');
   const selectedEntity = useViewerEntity();
 
   const [state, setState] = useState<GreenhouseState | null>(null);

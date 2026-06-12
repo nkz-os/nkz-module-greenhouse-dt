@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { SlotWidgetDefinition } from '@nekazari/sdk';
 
 const GreenhouseEntityTree: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('greenhouse-dt');
 
   // MVP: minimal — just returns null.
   // The AgriGreenhouse entities already appear in the core entity tree
