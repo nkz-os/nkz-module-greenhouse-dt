@@ -1,63 +1,36 @@
-"""
-MODULE_DISPLAY_NAME Backend - Configuration
-
-Environment-based configuration using pydantic-settings.
-"""
-
-from functools import lru_cache
+# backend/app/config.py
 from pydantic_settings import BaseSettings
 
-
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    app_name: str = "greenhouse-dt"
+    app_version: str = "0.1.0"
+    api_prefix: str = "/api/greenhouse"
     
-    # Application
-    app_name: str = "MODULE_DISPLAY_NAME"
-    app_version: str = "1.0.0"
-    debug: bool = False
-    
-    # API
-    api_prefix: str = "/api/MODULE_NAME"
-    cors_origins: list[str] = []  # Set via CORS_ORIGINS env var; empty = deny all cross-origin
-
-    # Keycloak / JWT Authentication
-    keycloak_url: str = "https://auth.example.com/auth"  # Override via KEYCLOAK_URL
-    keycloak_realm: str = "nekazari"
-    jwt_audience: str = "account"
-    jwt_issuer: str = ""  # Auto-derived from keycloak_url + realm if empty
-    
-    # Service-to-service authentication
-    module_management_key: str = ""
-    
-    # NGSI-LD / Orion-LD
+    # Orion-LD
     orion_ld_url: str = "http://orion-ld-service:1026"
-    context_url: str = "http://api-gateway-service:5000/ngsi-ld-context.json"
+    
+    # Redis (for ARQ and state)
+    redis_url: str = "redis://redis-service:6379/0"
+    
+    # PostgreSQL (admin_platform for tenant_limits)
+    postgres_url: str = ""  # MANDATORY — fail at startup if not set
+    
+    # MinIO (for COG storage in later phases)
+    minio_endpoint: str = "http://minio-service:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = "nekazari-greenhouse"
+    
+    # API gateway
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://nekazari.robotika.cloud",
+    ]
+    
+    # Internal service secret (for /internal/ endpoints)
+    internal_service_secret: str = ""
 
-    # Database (optional - uncomment if using)
-    # database_url: str = ""
-    
-    # Redis (for caching/celery - optional)
-    # redis_url: str = ""
-    
-    @property
-    def jwt_issuer_url(self) -> str:
-        """Get the JWT issuer URL."""
-        if self.jwt_issuer:
-            return self.jwt_issuer
-        return f"{self.keycloak_url}/realms/{self.keycloak_realm}"
-    
-    @property
-    def jwks_url(self) -> str:
-        """Get the JWKS URL for token verification."""
-        return f"{self.jwt_issuer_url}/protocol/openid-connect/certs"
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
-
-@lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+settings = Settings()
