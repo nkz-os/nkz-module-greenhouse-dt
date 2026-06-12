@@ -116,12 +116,18 @@ def _build_alert_entity(
     description: str,
     now: datetime,
 ) -> dict:
-    """Build a NGSI-LD Alert entity (spec §2.4)."""
+    """Build a NGSI-LD Alert entity (spec §2.4).
+
+    NOTE: @context is mandatory in the body because SyncOrionClient.create_entity()
+    sends Content-Type: application/ld+json but does NOT inject @context
+    (unlike the async OrionClient which calls _ensure_context()).
+    """
     alert_id = (
         f"urn:ngsi-ld:Alert:{greenhouse_id}-{sub_category}-"
         f"{now.strftime('%Y%m%d%H%M%S')}"
     )
     return {
+        "@context": settings.context_url,
         "id": alert_id,
         "type": "Alert",
         "name": {"type": "Property", "value": f"Risk {sub_category.replace('_', ' ').title()}"},
@@ -161,15 +167,24 @@ def evaluate_leaf_wetness(
     since = now - timedelta(hours=LOOKBACK_HOURS)
 
     # 1. Query TimescaleDB for history
-    ts = TimescaleClient(tenant_id=tenant_id, base_url=settings.timeseries_reader_url)
+    # NOTE: Use a single coroutine to avoid isolated event loops from
+    # multiple asyncio.run() calls (each creates a new loop, causing
+    # connection pool conflicts on httpx.AsyncClient).
+    async def _fetch():
+        ts = TimescaleClient(tenant_id=tenant_id, base_url=settings.timeseries_reader_url)
+        try:
+            sensor_urn = f"urn:ngsi-ld:AgriSensor:{sensor_id.split(':')[-1]}"
+            w = await ts.query(sensor_urn, "leafWetness", since, now)
+            t = await ts.query(sensor_urn, "temperature", since, now)
+            return w, t
+        finally:
+            await ts.close()
+
     try:
-        wetness = asyncio.run(ts.query(sensor_id, "leafWetness", since, now))
-        temps = asyncio.run(ts.query(sensor_id, "temperature", since, now))
+        wetness, temps = asyncio.run(_fetch())
     except Exception as exc:
         logger.warning("TimescaleDB query failed for %s: %s", sensor_id, exc)
         wetness, temps = [], []
-    finally:
-        asyncio.run(ts.close())
 
     # 2. Calculate metrics
     wh = _accumulated_wetness_hours(wetness)

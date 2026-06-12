@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     
     # Orion-LD
     orion_ld_url: str = "http://orion-ld-service:1026"
+    context_url: str = "http://api-gateway-service:5000/ngsi-ld-context.json"
     
     # Redis (for ARQ and state)
     redis_url: str = "redis://redis-service:6379/0"
