@@ -6,16 +6,17 @@
  * and separate entities for internal crop rows and sensor points.
  *
  * This component is rendered inside the map-layer slot of the Unified Viewer.
+ * Uses useViewer() from @nekazari/sdk to access the cesiumViewer.
  */
 
 import React, { useEffect, useRef } from 'react';
-import { useViewer } from '@nekazari/viewer-kit';
-import { useTimelineContext } from '../contexts/TimelineContext';
+import { useViewer } from '@nekazari/sdk';
+import { useTimelineContextOptional } from '../contexts/TimelineContext';
 
 interface GreenhouseShellProps {
   greenhouseId: string;
-  modelUrl?: string;       // glTF/glb URL for the shell model
-  position: {              // Center position of the greenhouse
+  modelUrl?: string;
+  position: {
     lon: number;
     lat: number;
     height?: number;
@@ -33,7 +34,7 @@ interface GreenhouseShellProps {
     coordinates: number[][][];
   }>;
   onSensorClick?: (sensorId: string) => void;
-  shellOpacity?: number;    // 0-1, default 0.35
+  shellOpacity?: number;
 }
 
 const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
@@ -43,19 +44,15 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
   scale = 1,
   sensors = [],
   zonePolygons = [],
-  onSensorClick,
   shellOpacity = 0.35,
 }) => {
-  const viewer = useViewer();
+  const viewerCtx = useViewer();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const viewer = (viewerCtx as any).cesiumViewer as any;
   const entitiesRef = useRef<Map<string, any>>(new Map());
 
-  // Handle missing TimelineProvider gracefully (may be rendered outside time-machine slot)
-  let timeline;
-  try {
-    timeline = useTimelineContext();
-  } catch {
-    timeline = null;
-  }
+  // Access timeline context optionally (returns null if no TimelineProvider)
+  const timeline = useTimelineContextOptional();
 
   useEffect(() => {
     if (!viewer) return;
@@ -67,7 +64,7 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     const entities = entitiesRef.current;
 
     // Clean up previous entities
-    entities.forEach((entity, id) => {
+    entities.forEach((entity: any) => {
       viewerInstance.entities.remove(entity);
     });
     entities.clear();
@@ -104,11 +101,9 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     // 2. Render sensor points with color-coded temperature
     sensors.forEach((sensor) => {
       if (!sensor.location?.coordinates) return;
-
       const [lon, lat] = sensor.location.coordinates;
       const temp = sensor.temperature;
 
-      // Color gradient: blue (cold) → green → yellow → red (hot)
       let color = Cesium.Color.CYAN;
       if (temp !== undefined) {
         if (temp < 15) color = Cesium.Color.fromCssColorString('#0088ff');
@@ -151,24 +146,6 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       entities.set(`sensor-${sensor.id}`, sensorEntity);
     });
 
-    // 3.5 COG heatmap overlay (PNG with colormap from TimelineContext)
-    let heatmapLayer: any = null;
-    if (timeline?.displayUrl && timeline?.bounds && viewerInstance) {
-      const Cesium = (window as any).Cesium;
-      if (Cesium) {
-        heatmapLayer = viewerInstance.imageryLayers.addImageryProvider(
-          new Cesium.SingleTileImageryProvider({
-            url: timeline.displayUrl,
-            rectangle: Cesium.Rectangle.fromDegrees(
-              timeline.bounds[0], timeline.bounds[1],
-              timeline.bounds[2], timeline.bounds[3]
-            ),
-          })
-        );
-        heatmapLayer.alpha = 0.6;
-      }
-    }
-
     // 3. Render zone polygons (optional)
     zonePolygons.forEach((zone) => {
       if (!zone.coordinates?.length) return;
@@ -197,23 +174,38 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       entities.set(`zone-${zone.id}`, polygonEntity);
     });
 
-    return () => {
-      // Cleanup heatmap overlay
-      if (heatmapLayer && !viewerInstance.isDestroyed()) {
-        viewerInstance.imageryLayers.remove(heatmapLayer);
-      }
+    // 4. COG heatmap overlay (PNG with colormap from TimelineContext)
+    let heatmapLayer: any = null;
+    if (timeline?.displayUrl && timeline?.bounds && viewerInstance) {
+      heatmapLayer = viewerInstance.imageryLayers.addImageryProvider(
+        new Cesium.SingleTileImageryProvider({
+          url: timeline.displayUrl,
+          rectangle: Cesium.Rectangle.fromDegrees(
+            timeline.bounds[0], timeline.bounds[1],
+            timeline.bounds[2], timeline.bounds[3]
+          ),
+        })
+      );
+      heatmapLayer.alpha = 0.6;
+    }
 
-      // Cleanup on unmount
-      entities.forEach((entity, id) => {
+    return () => {
+      entities.forEach((entity: any) => {
         if (!viewerInstance.isDestroyed()) {
           viewerInstance.entities.remove(entity);
         }
       });
       entities.clear();
+      if (heatmapLayer && !viewerInstance.isDestroyed()) {
+        viewerInstance.imageryLayers.remove(heatmapLayer);
+      }
     };
-  }, [viewer, greenhouseId, modelUrl, position, scale, sensors, zonePolygons, shellOpacity, timeline?.displayUrl, timeline?.bounds]);
+  }, [
+    viewer, greenhouseId, modelUrl, position, scale,
+    sensors, zonePolygons, shellOpacity,
+    timeline?.displayUrl, timeline?.bounds,
+  ]);
 
-  // This component does not render DOM — it adds entities to Cesium
   return null;
 };
 

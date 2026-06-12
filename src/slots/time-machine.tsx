@@ -1,10 +1,9 @@
 // src/slots/time-machine.tsx
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useViewerEntity } from '@nekazari/viewer-kit';
+import { useViewer } from '@nekazari/sdk';
 import { Play, Pause, SkipBack } from 'lucide-react';
-import type { SlotWidgetDefinition } from '@nekazari/sdk';
-import { useTimelineContext, TimelineVariable } from '../contexts/TimelineContext';
+import { useTimelineContext, TimelineVariable, TimelineProvider } from '../contexts/TimelineContext';
 import { greenhouseApi } from '../services/api';
 
 const VARIABLE_OPTIONS: { value: TimelineVariable; labelKey: string }[] = [
@@ -15,33 +14,25 @@ const VARIABLE_OPTIONS: { value: TimelineVariable; labelKey: string }[] = [
   { value: 'par', labelKey: 'time_machine.par' },
 ];
 
-// Wrapper that provides context
-const TimeMachineWithProvider: React.FC = () => (
-  <TimelineProvider>
-    <TimeMachineInner />
-  </TimelineProvider>
-);
-
 const TimeMachineInner: React.FC = () => {
   const { t } = useTranslation('greenhouse-dt');
-  const selectedEntity = useViewerEntity();
+  const viewer = useViewer();
   const ctx = useTimelineContext();
 
-  const greenhouseId = selectedEntity?.type === 'AgriGreenhouse'
-    ? selectedEntity.id.split(':').pop()
-    : null;
+  const greenhouseId: string | null =
+    viewer.selectedEntityType === 'AgriGreenhouse' && viewer.selectedEntityId
+      ? viewer.selectedEntityId.split(':').pop() || null
+      : null;
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const fetchRef = useRef(greenhouseId);
-  fetchRef.current = greenhouseId;
-
   const timeRef = useRef(ctx.currentTime);
   timeRef.current = ctx.currentTime;
+  fetchRef.current = greenhouseId;
 
   // Playback animation: tick backward 15 min every 500ms
   useEffect(() => {
     if (!ctx.playing || !greenhouseId) return;
-    timeRef.current = ctx.currentTime;
     const interval = setInterval(() => {
       const next = new Date(timeRef.current.getTime() - 15 * 60 * 1000);
       timeRef.current = next;
@@ -54,9 +45,7 @@ const TimeMachineInner: React.FC = () => {
   useEffect(() => {
     if (!ctx.dirty || !greenhouseId || ctx.loading) return;
 
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(async () => {
       if (fetchRef.current !== greenhouseId) return;
@@ -135,7 +124,9 @@ const TimeMachineInner: React.FC = () => {
       <select
         className="text-xs border rounded px-1 py-0.5"
         value={ctx.variable}
-        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.setVariable(e.target.value as TimelineVariable)}
+        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+          ctx.setVariable(e.target.value as TimelineVariable)
+        }
       >
         {VARIABLE_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -144,8 +135,10 @@ const TimeMachineInner: React.FC = () => {
         ))}
       </select>
 
-      {/* Stats */}
-      <span className={`text-xs min-w-[180px] ${ctx.loading ? 'opacity-40' : 'text-gray-500'}`}>
+      {/* Stats (keep visible but dimmed during loading) */}
+      <span
+        className={`text-xs min-w-[180px] ${ctx.loading ? 'opacity-40' : 'text-gray-500'}`}
+      >
         {ctx.stats ? (
           <>
             {t('time_machine.mean', { value: ctx.stats.mean.toFixed(1) })}
@@ -157,7 +150,7 @@ const TimeMachineInner: React.FC = () => {
             {ctx.sensorCount} {t('time_machine.sensors')}
           </>
         ) : (
-          '--'
+          '\u2014\u2014'
         )}
       </span>
 
@@ -168,13 +161,10 @@ const TimeMachineInner: React.FC = () => {
   );
 };
 
-export const timeMachineSlot: SlotWidgetDefinition = {
-  id: 'greenhouse-dt-time-machine',
-  component: 'TimeMachineWithProvider',
-  priority: 10,
-  showWhen: {
-    entityType: ['AgriGreenhouse'],
-  },
-};
+const TimeMachine: React.FC = () => (
+  <TimelineProvider>
+    <TimeMachineInner />
+  </TimelineProvider>
+);
 
-export default TimeMachineWithProvider;
+export default TimeMachine;

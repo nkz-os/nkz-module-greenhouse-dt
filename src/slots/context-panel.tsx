@@ -8,22 +8,22 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useViewerEntity } from '@nekazari/viewer-kit';
+import { useViewer } from '@nekazari/sdk';
 import { AlertTriangle, Thermometer, Droplets, Wind, Leaf, Activity } from 'lucide-react';
-import type { SlotWidgetDefinition } from '@nekazari/sdk';
 import { greenhouseApi, GreenhouseState, Alert } from '../services/api';
 
 const GreenhouseContextPanel: React.FC = () => {
   const { t } = useTranslation('greenhouse-dt');
-  const selectedEntity = useViewerEntity();
+  const viewer = useViewer();
 
   const [state, setState] = useState<GreenhouseState | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const greenhouseId = selectedEntity?.type === 'AgriGreenhouse'
-    ? selectedEntity.id.split(':').pop()
-    : null;
+  const greenhouseId: string | null =
+    viewer.selectedEntityType === 'AgriGreenhouse' && viewer.selectedEntityId
+      ? viewer.selectedEntityId.split(':').pop() || null
+      : null;
 
   useEffect(() => {
     if (!greenhouseId) {
@@ -168,15 +168,6 @@ const GreenhouseContextPanel: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export const greenhouseContextPanel: SlotWidgetDefinition = {
-  id: 'greenhouse-dt-context-panel',
-  component: 'GreenhouseContextPanel',
-  priority: 10,
-  showWhen: {
-    entityType: ['AgriGreenhouse'],
-  },
 };
 
 export default GreenhouseContextPanel;

@@ -1,9 +1,20 @@
-// src/services/api.ts
-import { createApiClient } from '@nekazari/sdk';
+/**
+ * Greenhouse DT API Service
+ *
+ * Canonical pattern: plain fetch wrapper (no createApiClient — doesn't exist in SDK v1).
+ * Uses import.meta.env.VITE_API_URL for base URL, matching bioorchestrator pattern.
+ */
 
-const api = createApiClient({
-  baseURL: '/api/greenhouse',
-});
+const API_BASE = (import.meta as any).env?.VITE_API_URL || 'https://nkz.robotika.cloud';
+const BASE = `${API_BASE}/api/greenhouse`;
+
+async function get<T = any>(path: string): Promise<T> {
+  const url = path.startsWith('http') ? path : `${BASE}${path}`;
+  const resp = await fetch(url, { credentials: 'include' });
+  if (resp.status === 401) throw new Error('Unauthorized');
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
 
 export interface Greenhouse {
   id: string;
@@ -11,6 +22,7 @@ export interface Greenhouse {
   description?: string;
   location?: any;
   area?: number;
+  height?: number;
   coverType?: string;
   orientation?: string;
 }
@@ -70,13 +82,14 @@ export interface ReconstructionResult {
 }
 
 export const greenhouseApi = {
-  list: () => api.get<Greenhouse[]>('/'),
-  get: (id: string) => api.get<Greenhouse>(`/${id}`),
-  getState: (id: string) => api.get<GreenhouseState>(`/${id}/state`),
+  list: () => get<Greenhouse[]>('/'),
+  get: (id: string) => get<Greenhouse>(`/${id}`),
+  getState: (id: string) => get<GreenhouseState>(`/${id}/state`),
   getAlerts: (id: string, status?: string) =>
-    api.get<Alert[]>(`/${id}/alerts`, { params: { status } }),
-  reconstruct: (id: string, timestamp: string, variable: string, resolution?: number) =>
-    api.get<ReconstructionResult>(`/${id}/state/reconstruct`, {
-      params: { timestamp, variable, resolution: resolution ?? 50 },
-    }),
+    get<Alert[]>(`/${id}/alerts${status ? `?status=${status}` : ''}`),
+  reconstruct: (id: string, timestamp: string, variable: string, resolution?: number) => {
+    const params = new URLSearchParams({ timestamp, variable });
+    if (resolution) params.set('resolution', String(resolution));
+    return get<ReconstructionResult>(`/${id}/state/reconstruct?${params}`);
+  },
 };

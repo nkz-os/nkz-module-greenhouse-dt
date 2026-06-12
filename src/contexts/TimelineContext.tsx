@@ -114,3 +114,12 @@ export function useTimelineContext(): TimelineState {
   }
   return ctx;
 }
+
+/** Safe version that returns null if no TimelineProvider is mounted. */
+export function useTimelineContextOptional(): TimelineState | null {
+  try {
+    return useTimelineContext();
+  } catch {
+    return null;
+  }
+}

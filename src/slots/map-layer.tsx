@@ -7,12 +7,11 @@
  * - Sensor points with temperature color-coding
  * - Zone polygons
  *
- * Uses the existing map-layer slot system.
+ * Uses useViewer() from @nekazari/sdk, matching canonical bioorchestrator pattern.
  */
 
 import React, { useMemo } from 'react';
-import { useViewer, useViewerEntity } from '@nekazari/viewer-kit';
-import type { SlotWidgetDefinition } from '@nekazari/sdk';
+import { useViewer } from '@nekazari/sdk';
 import GreenhouseShell from './greenhouse-shell';
 import { useGreenhouseState } from '../hooks/useGreenhouseState';
 
@@ -22,11 +21,12 @@ interface MapLayerProps {
 
 const GreenhouseMapLayer: React.FC<MapLayerProps> = ({ greenhouseId }) => {
   const viewer = useViewer();
-  const selectedEntity = useViewerEntity();
 
   // Derive greenhouseId from selected entity if not explicitly provided
-  const activeGreenhouseId = greenhouseId ||
-    (selectedEntity?.type === 'AgriGreenhouse' ? selectedEntity.id : null);
+  const activeGreenhouseId: string | null = greenhouseId ||
+    (viewer.selectedEntityType === 'AgriGreenhouse' && viewer.selectedEntityId
+      ? viewer.selectedEntityId.split(':').pop() || null
+      : null);
 
   const { state, loading } = useGreenhouseState(activeGreenhouseId);
 
@@ -45,7 +45,7 @@ const GreenhouseMapLayer: React.FC<MapLayerProps> = ({ greenhouseId }) => {
     );
   }, [state]);
 
-  // In MVP we use a placeholder — Phase 2 will load from MinIO
+  // In MVP we use a placeholder — Phase 2 loads from MinIO
   const modelUrl = `/api/greenhouse/${activeGreenhouseId}/model`;
 
   return (
@@ -58,16 +58,6 @@ const GreenhouseMapLayer: React.FC<MapLayerProps> = ({ greenhouseId }) => {
       shellOpacity={0.35}
     />
   );
-};
-
-// Export widget definition for the slot registry
-export const greenhouseMapLayer: SlotWidgetDefinition = {
-  id: 'greenhouse-dt-map-layer',
-  component: 'GreenhouseMapLayer',
-  priority: 10,
-  showWhen: {
-    entityType: ['AgriGreenhouse'],
-  },
 };
 
 export default GreenhouseMapLayer;
