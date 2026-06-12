@@ -1,49 +1,31 @@
--- =============================================================================
--- MODULE_DISPLAY_NAME — Marketplace Registration
--- =============================================================================
--- Run once per environment to register this module in marketplace_modules.
--- Tenants then activate it via the UI (tenant_installed_modules).
--- =============================================================================
+-- k8s/registration.sql
+-- Register greenhouse-dt module in the marketplace.
+-- Apply via: PGPOD=$(kubectl get pods -n nekazari -l app=postgresql -o jsonpath='{.items[0].metadata.name}')
+-- kubectl exec -n nekazari $PGPOD -- psql -U postgres -d admin_platform -f /tmp/registration.sql
 
 INSERT INTO marketplace_modules (
-    id,
-    name,
-    display_name,
-    description,
-    remote_entry_url,
-    version,
-    author,
-    category,
-    route_path,
-    label,
-    module_type,
-    required_plan_type,
-    pricing_tier,
-    is_local,
-    is_active,
-    required_roles,
-    metadata
+  module_id, name, description, category,
+  metadata, is_active, created_at
 ) VALUES (
-    'MODULE_NAME',
-    'MODULE_NAME',
-    'MODULE_DISPLAY_NAME',
-    'MODULE_DISPLAY_NAME — Description of your module',
-    '/modules/MODULE_NAME/nkz-module.js',
-    '1.0.0',
-    'YOUR_ORG',
-    'analytics',
-    '/MODULE_ROUTE',
-    'MODULE_DISPLAY_NAME',
-    'ADDON_FREE',
-    'basic',
-    'FREE',
-    false,
-    true,
-    ARRAY['Farmer', 'TenantAdmin', 'PlatformAdmin'],
-    '{"icon": "🔧", "color": "#3B82F6"}'::jsonb
-) ON CONFLICT (id) DO UPDATE SET
-    display_name   = EXCLUDED.display_name,
-    description    = EXCLUDED.description,
-    remote_entry_url = EXCLUDED.remote_entry_url,
-    is_active      = true,
-    updated_at     = NOW();
+  'greenhouse-dt',
+  '{"en": "Greenhouse Digital Twin", "es": "Digital Twin de Invernadero"}',
+  '{"en": "Real-time greenhouse monitoring with 3D visualization, phytopathology alerts, and predictive automation", "es": "Monitorización en tiempo real de invernaderos con visualización 3D, alertas fitopatológicas y automatización predictiva"}',
+  'monitoring',
+  jsonb_build_object(
+    'version', '0.1.0',
+    'icon', 'Sprout',
+    'min_platform_version', '2.0.0',
+    'setup_parcel_url', 'http://greenhouse-dt-backend:8430/api/internal/setup-parcel',
+    'entity_types', jsonb_build_array('AgriGreenhouse', 'AgriSensor', 'Alert'),
+    'capabilities', jsonb_build_array(
+      '3d_visualization',
+      'phytopathology_alerts',
+      'time_machine',
+      'predictive_automation'
+    )
+  ),
+  true,
+  NOW()
+) ON CONFLICT (module_id) DO UPDATE SET
+  metadata = EXCLUDED.metadata,
+  is_active = EXCLUDED.is_active;
