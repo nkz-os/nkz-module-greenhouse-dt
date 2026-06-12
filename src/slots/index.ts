@@ -13,14 +13,11 @@
  *   entity-tree       — context menu entry in the entity tree
  *   dashboard-widget  — card in the tenant dashboard
  */
-import { ExampleSlot } from '../components/slots/ExampleSlot';
+import type { ModuleViewerSlots } from '@nekazari/sdk';
+import { greenhouseMapLayer } from './map-layer';
 
-export const moduleSlots = {
-  'context-panel': [
-    {
-      id: 'MODULE_NAME-context',
-      component: ExampleSlot,
-      priority: 10,
-    },
-  ],
+const slots: ModuleViewerSlots = {
+  'map-layer': [greenhouseMapLayer],
 };
+
+export default slots;

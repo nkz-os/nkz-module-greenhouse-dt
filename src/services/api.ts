@@ -1,41 +1,66 @@
-/**
- * API Client for MODULE_DISPLAY_NAME
- * 
- * This is a template for creating an API client that uses the Nekazari SDK.
- * Replace with your actual API endpoints and methods.
- */
+// src/services/api.ts
+import { createApiClient } from '@nekazari/sdk';
 
-import { NKZClient, useAuth } from '@nekazari/sdk';
+const api = createApiClient({
+  baseURL: '/api/greenhouse',
+});
 
-/**
- * Hook to get API client instance
- * Automatically handles authentication and tenant context
- */
-export function useModuleApi() {
-  const { getToken, tenantId } = useAuth();
-  
-  const client = new NKZClient({
-    baseUrl: '/api/MODULE_NAME',
-    getToken,
-    getTenantId: () => tenantId,
-  });
+export interface Greenhouse {
+  id: string;
+  name?: string;
+  description?: string;
+  location?: any;
+  area?: number;
+  coverType?: string;
+  orientation?: string;
+}
 
-  return {
-    // Example API methods - replace with your actual endpoints
-    getData: () => client.get('/data'),
-    getDataById: (id: string) => client.get(`/data/${id}`),
-    createData: (data: any) => client.post('/data', data),
-    updateData: (id: string, data: any) => client.put(`/data/${id}`, data),
-    deleteData: (id: string) => client.delete(`/data/${id}`),
+export interface AgriSensorState {
+  id: string;
+  name?: string;
+  zone?: string;
+  temperature?: number;
+  relativeHumidity?: number;
+  leafWetness?: number;
+  solarIrradiance?: number;
+  co2?: number;
+  batteryLevel?: number;
+  lastSeen?: string;
+  location?: any;
+}
+
+export interface ZoneState {
+  zone_id: string;
+  sensor_count: number;
+  sensors: AgriSensorState[];
+  aggregates: {
+    avg_temperature?: number;
+    avg_humidity?: number;
+    min_temperature?: number;
+    max_temperature?: number;
   };
 }
 
-/**
- * Standalone API client (for use outside React components)
- */
-export function createModuleApiClient() {
-  // This would need token and tenantId passed in
-  // For React components, use useModuleApi() instead
-  throw new Error('Use useModuleApi() hook in React components');
+export interface GreenhouseState {
+  greenhouse_id: string;
+  zones: ZoneState[];
+  total_sensors: number;
 }
 
+export interface Alert {
+  id: string;
+  name?: string;
+  description?: string;
+  severity?: string;
+  status?: string;
+  subCategory?: string;
+  dateIssued?: string;
+}
+
+export const greenhouseApi = {
+  list: () => api.get<Greenhouse[]>('/'),
+  get: (id: string) => api.get<Greenhouse>(`/${id}`),
+  getState: (id: string) => api.get<GreenhouseState>(`/${id}/state`),
+  getAlerts: (id: string, status?: string) =>
+    api.get<Alert[]>(`/${id}/alerts`, { params: { status } }),
+};
