@@ -1,4 +1,6 @@
 # k8s/backend-deployment.yaml
+# Non-sensitive env vars come from greenhouse-dt-config ConfigMap (gitops-config).
+# Secrets use SecretKeyRef. No production domains in this file.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,11 +24,12 @@ spec:
           ports:
             - containerPort: 8420
               name: http
+          envFrom:
+            - configMapRef:
+                name: greenhouse-dt-config
+                optional: true
           env:
-            - name: ORION_LD_URL
-              value: "http://orion-ld-service:1026"
-            - name: REDIS_URL
-              value: "redis://redis-service:6379/0"
+            # ── Secrets ──────────────────────────────────────────
             - name: POSTGRES_URL
               valueFrom:
                 secretKeyRef:
@@ -37,8 +40,6 @@ spec:
                 secretKeyRef:
                   name: internal-service-secret
                   key: INTERNAL_SERVICE_SECRET
-            - name: MINIO_ENDPOINT
-              value: "http://minio-service:9000"
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -49,14 +50,12 @@ spec:
                 secretKeyRef:
                   name: minio-secret
                   key: secret-key
-            - name: CORS_ORIGINS
-              # Production domain set via gitops-config overlay
-              value: '["https://YOUR_DOMAIN","http://localhost:3000"]'
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
                   key: password
+            # ── Derived (use secrets) ────────────────────────────
             - name: CELERY_BROKER_URL
               value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/1"
             - name: CELERY_BACKEND_URL

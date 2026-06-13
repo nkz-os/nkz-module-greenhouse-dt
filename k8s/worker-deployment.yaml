@@ -1,4 +1,6 @@
 # k8s/worker-deployment.yaml
+# Non-sensitive env vars come from greenhouse-dt-config ConfigMap (gitops-config).
+# Secrets use SecretKeyRef. No production domains in this file.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,27 +22,27 @@ spec:
         - name: worker
           image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:03bc558d8fd09d327afad17972fabcce7fbb938291558a740fdaa9c8317a7888
           command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: greenhouse-dt-config
+                optional: true
           env:
+            # ── Secrets ──────────────────────────────────────────
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: redis-secret
                   key: password
-            - name: ORION_LD_URL
-              value: "http://orion-ld-service:1026"
-            - name: CELERY_BROKER_URL
-              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/1"
-            - name: CELERY_BACKEND_URL
-              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/2"
-            - name: TIMESERIES_READER_URL
-              value: "http://timeseries-reader-service:5000"
-            - name: CONTEXT_URL
-              value: "http://api-gateway-service:5000/ngsi-ld-context.json"
             - name: INTERNAL_SERVICE_SECRET
               valueFrom:
                 secretKeyRef:
                   name: internal-service-secret
                   key: INTERNAL_SERVICE_SECRET
+            # ── Derived (use secrets) ────────────────────────────
+            - name: CELERY_BROKER_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/1"
+            - name: CELERY_BACKEND_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/2"
           startupProbe:
             exec:
               command: ["pgrep", "-f", "celery"]
