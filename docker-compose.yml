@@ -1,13 +1,15 @@
 # =============================================================================
-# MODULE_DISPLAY_NAME - Local Development with Docker Compose
+# Greenhouse Digital Twin - Local Development with Docker Compose
 # =============================================================================
-# Runs the backend API locally. The frontend is a Vite dev server (npm run dev),
-# not a Docker container — IIFE modules don't ship a standalone frontend image.
+# Runs the backend API locally. The frontend is a Vite dev server (pnpm run dev),
+# not a Docker container — MF2 modules are loaded by the host at runtime.
 #
 # Usage:
 #   docker-compose up        # Start backend
 #   docker-compose up -d     # Start in background
 #   docker-compose down      # Stop
+#
+# Required env: POSTGRES_URL, INTERNAL_SERVICE_SECRET
 # =============================================================================
 
 version: '3.8'
@@ -19,56 +21,21 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8430:8420"
     environment:
-      - APP_NAME=MODULE_DISPLAY_NAME
+      - APP_NAME=greenhouse-dt
       - DEBUG=true
-      - API_PREFIX=/api/MODULE_NAME
-      - KEYCLOAK_URL=https://auth.example.com/auth
-      - KEYCLOAK_REALM=nekazari
-      - JWT_AUDIENCE=account
+      - API_PREFIX=/api/greenhouse
+      - ORION_LD_URL=http://orion-ld-service:1026
+      - REDIS_URL=redis://redis-service:6379/0
       - CORS_ORIGINS=["http://localhost:5003","http://localhost:5173"]
+      - POSTGRES_URL=${POSTGRES_URL:?POSTGRES_URL is required}
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET:?INTERNAL_SERVICE_SECRET is required}
     volumes:
       - ./backend/app:/app/app:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8420/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-
-# =============================================================================
-# Optional Services - Uncomment if needed
-# =============================================================================
-
-  # PostgreSQL database (uncomment if needed)
-  # db:
-  #   image: timescale/timescaledb:latest-pg15
-  #   ports:
-  #     - "5432:5432"
-  #   environment:
-  #     - POSTGRES_USER=module
-  #     - POSTGRES_PASSWORD=modulepass
-  #     - POSTGRES_DB=module_db
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U module"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # Redis (uncomment if using Celery or caching)
-  # redis:
-  #   image: redis:7-alpine
-  #   ports:
-  #     - "6379:6379"
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-# volumes:
-#   postgres_data:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8420 --reload

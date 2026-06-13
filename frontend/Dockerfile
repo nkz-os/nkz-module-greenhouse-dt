@@ -1,4 +1,4 @@
-# Multi-stage build for MODULE_DISPLAY_NAME Frontend
+# Multi-stage build for Greenhouse DT Frontend
 # Stage 1: Build with Vite
 FROM node:22-alpine AS builder
 
