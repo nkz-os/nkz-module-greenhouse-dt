@@ -1,32 +1,48 @@
 ---
-title: "[Tu Nombre de Módulo Aquí]"
-description: "Escribe aquí una descripción muy breve (1 línea) de lo que hace tu módulo."
+title: "Greenhouse Digital Twin"
+description: "Monitorización y Digital Twin de invernaderos con sensores IoT, alertas fitopatológicas y visualización 3D en CesiumJS."
 sidebar:
   order: 1
 ---
 
-# Bienvenido a la Documentación de tu Módulo
+# Greenhouse Digital Twin — nkz-module-greenhouse-dt
 
-> **¡Atención Desarrollador!** Esta carpeta `/docs` es mágica. Todo lo que escribas aquí se subirá automáticamente al portal público de documentación `nkz-os.org`. Por favor, **no pongas aquí notas privadas ni logs de errores**.
+Módulo de [Nekazari Platform](https://nekazari.robotika.cloud) que proporciona un **Digital Twin para invernaderos** con monitorización en tiempo real, alertas predictivas y visualización 3D geoespacial.
 
-## ¿Cómo añadir el Logo y un Pantallazo de tu módulo? (Guía Fácil)
+## Funcionalidades
 
-Para que tu módulo luzca profesional en el catálogo de la web oficial, necesitas incluir imágenes. Sigue estos **3 sencillos pasos**:
+### Fase 1 — MVP ✅
+- **Visualización 3D en CesiumJS** — Estructura semitransparente del invernadero con puntos de sensor coloreados por temperatura
+- **Panel de estado contextual** — Temperatura, humedad, VPD, alertas activas y agregados por zona
+- **API REST** — CRUD de entidades `AgriGreenhouse`, estado agregado por sensores, consulta de alertas
+- **Activación de parcela** — Flujo `POST /api/internal/setup-parcel` con entity-manager
+- **Traducciones** — Español e inglés completas
 
-### Paso 1: Guarda tus imágenes aquí
-Coge tu archivo del logo (por ejemplo, `logo.png`) y el pantallazo de tu aplicación (por ejemplo, `pantallazo.jpg`) y **arrástralos directamente dentro de esta misma carpeta `docs/`**. 
-*(Importante: Ponlos junto a este archivo `index.md`, no crees subcarpetas para las imágenes).*
+### Fase 2 — Alertas Fitopatológicas 🚧
+- Worker Celery que monitoriza leaf wetness vía suscripción NGSI-LD
+- Creación automática de entidades `Alert` con severidad (low/medium/high/critical)
+- Evaluación de Botrytis cinerea y mildiu basada en umbrales de temperatura + horas de humedad foliar
 
-### Paso 2: Escribe este código
-Copia y pega el código que ves justo debajo, pero cambiando el nombre del archivo por el tuyo real:
+### Fase 3 — Máquina del Tiempo 🚧
+- Reconstrucción de interpolación termodinámica desde TimescaleDB
+- Generación de COG heatmaps + PNG display para Cesium
+- Timeline interactivo con slider temporal
 
-```markdown
-<!-- Así se pone el logo: -->
-![Logo de mi módulo](./logo.png)
+### Fase 4 — Auto-Pilot 🚧
+- MPC con lookahead para control predictivo (ventilación, sombreo, riego)
+- Comandos idempotentes vía IoT Agent
 
-<!-- Así se pone un pantallazo: -->
-![Vista principal del módulo](./pantallazo.jpg)
-```
+## Stack
 
-### Paso 3: ¡Listo!
-No tienes que hacer nada más. Cuando hagas `git push` a tu rama `main`, nuestro motor central se encargará de descargar tus imágenes automáticamente y las mostrará perfectamente encuadradas en la web oficial.
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React 18, TypeScript, CesiumJS, Module Federation 2.0 |
+| Backend | Python 3.12, FastAPI, nkz-platform-sdk |
+| Workers | Celery + Redis |
+| Context Broker | Orion-LD (FIWARE NGSI-LD) |
+| DB | TimescaleDB (series), PostgreSQL (admin_platform) |
+| Storage | MinIO (COG heatmaps, modelos 3D) |
+
+## Licencia
+
+GNU Affero General Public License v3.0 — ver [LICENSE](../LICENSE).
