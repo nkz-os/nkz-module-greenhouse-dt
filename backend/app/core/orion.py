@@ -101,7 +101,7 @@ def build_zone_entity(
 
     NOTE: @context is mandatory in the body because SyncOrionClient.create_entity()
     sends Content-Type: application/ld+json but does NOT inject @context.
-    Uses hasAgriParcel relationship (SDM standard), with refAgriGreenhouse
+    SDM-standard hasAgriGreenhouse relationship, with refAgriGreenhouse
     as legacy fallback for backward compatibility during migration.
     """
     entity = {
@@ -109,7 +109,11 @@ def build_zone_entity(
         "id": f"urn:ngsi-ld:AgriParcel:{zone_id}",
         "type": "AgriParcel",
         "name": {"type": "Property", "value": name},
-        "refAgriGreenhouse": {  # Legacy — will be migrated to hasAgriGreenhouse
+        "refAgriGreenhouse": {  # Legacy — kept for backward compat during migration
+            "type": "Relationship",
+            "object": f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}",
+        },
+        "hasAgriGreenhouse": {  # SDM standard (FIWARE Relationship Naming)
             "type": "Relationship",
             "object": f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}",
         },
