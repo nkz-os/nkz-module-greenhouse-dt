@@ -124,6 +124,65 @@ class TestBuildAlertEntity:
         assert "botrytis" in entity["id"]
 
 
+class TestExtractGreenhouseId:
+    """Tests for _extract_greenhouse_id — handles any zone naming pattern."""
+
+    def test_standard_zone_naming(self):
+        from app.api.notify import _extract_greenhouse_id
+        entity = {
+            "hasAgriParcel": {
+                "type": "Relationship",
+                "object": "urn:ngsi-ld:AgriParcel:gh42-zone-NO",
+            }
+        }
+        assert _extract_greenhouse_id(entity) == "gh42"
+
+    def test_direct_parcel_reference(self):
+        from app.api.notify import _extract_greenhouse_id
+        entity = {
+            "hasAgriParcel": {
+                "type": "Relationship",
+                "object": "urn:ngsi-ld:AgriParcel:parcel-001",
+            }
+        }
+        assert _extract_greenhouse_id(entity) is None
+
+    def test_no_relationship(self):
+        from app.api.notify import _extract_greenhouse_id
+        assert _extract_greenhouse_id({}) is None
+
+    def test_multiple_zone_dashes(self):
+        """Greenhouse ID with hyphens, and zone suffix with capital Z."""
+        from app.api.notify import _extract_greenhouse_id
+        entity = {
+            "hasAgriParcel": {
+                "type": "Relationship",
+                "object": "urn:ngsi-ld:AgriParcel:my-gh-Zone-A",
+            }
+        }
+        assert _extract_greenhouse_id(entity) == "my-gh"
+
+    def test_legacy_refAgriParcel(self):
+        from app.api.notify import _extract_greenhouse_id
+        entity = {
+            "refAgriParcel": {
+                "type": "Relationship",
+                "object": "urn:ngsi-ld:AgriParcel:gh42-zone-NO",
+            }
+        }
+        assert _extract_greenhouse_id(entity) == "gh42"
+
+    def test_no_parcel_id(self):
+        from app.api.notify import _extract_greenhouse_id
+        entity = {"hasAgriParcel": {"type": "Relationship", "object": ""}}
+        assert _extract_greenhouse_id(entity) is None
+
+    def test_wrong_rel_type(self):
+        from app.api.notify import _extract_greenhouse_id
+        entity = {"hasAgriParcel": "not_a_dict"}
+        assert _extract_greenhouse_id(entity) is None
+
+
 class TestEvaluateTask:
     @patch("app.workers.pathological.TimescaleClient")
     @patch("app.workers.pathological.SyncOrionClient")

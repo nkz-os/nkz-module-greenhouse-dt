@@ -25,22 +25,26 @@ def _extract_greenhouse_id(entity: dict) -> str | None:
     """Extract greenhouse ID from sensor entity via relationships.
 
     Sensors link to zone parcels via refAgriParcel/hasAgriParcel.
-    Zone parcels are named {greenhouse_id}-zone-{quadrant}, so
-    we extract the prefix before "-zone-".
+    Zone parcels are named {greenhouse_id}-zone-{quadrant} or similar.
+    Uses case-insensitive search for "-zone-" suffix so any naming
+    variant (zone, Zone, ZONE) is handled robustly, regardless of
+    hyphens in the greenhouse ID itself.
     """
+    ZONE_SUFFIX = "-zone-"
+
     for rel_key in ("hasAgriParcel", "refAgriParcel"):
         rel = entity.get(rel_key, {})
         if not isinstance(rel, dict):
             continue
-        parcel_id = rel.get("object", "")
-        if not isinstance(parcel_id, str) or not parcel_id:
+        parcel_urn = rel.get("object", "")
+        if not isinstance(parcel_urn, str) or not parcel_urn:
             continue
-        zone_id = parcel_id.split(":")[-1]
-        # Zone format: {greenhouse_id}-zone-{quadrant}
-        if "-zone-" in zone_id:
-            return zone_id.split("-zone-")[0]
-        # Direct parcel reference (not a zone) — cannot derive greenhouse
-        logger.debug("Parcel %s is not a zone entity, skipping greenhouse extraction", zone_id)
+        parcel_id = parcel_urn.split(":")[-1]
+        zone_idx = parcel_id.lower().find(ZONE_SUFFIX)
+        if zone_idx != -1:
+            return parcel_id[:zone_idx]
+        logger.debug("Parcel %s is not a zone entity (no '%s' found), skipping greenhouse extraction",
+                     parcel_id, ZONE_SUFFIX)
         return None
     return None
 
