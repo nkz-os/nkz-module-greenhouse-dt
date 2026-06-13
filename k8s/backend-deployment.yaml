@@ -51,6 +51,15 @@ spec:
                   key: secret-key
             - name: CORS_ORIGINS
               value: '["https://nekazari.robotika.cloud","http://localhost:3000"]'
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+            - name: CELERY_BROKER_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/1"
+            - name: CELERY_BACKEND_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379/2"
           startupProbe:
             httpGet:
               path: /health
