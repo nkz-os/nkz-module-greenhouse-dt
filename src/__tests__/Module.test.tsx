@@ -39,5 +39,14 @@ describe('greenhouse-dt module definition', () => {
     expect(moduleDef.slots!['map-layer']!.length).toBeGreaterThan(0);
     expect(moduleDef.slots!['context-panel']!.length).toBeGreaterThan(0);
     expect(moduleDef.slots!['bottom-panel']!.length).toBeGreaterThan(0);
+
+    // Validate slot item structure
+    const firstLayer = moduleDef.slots!['map-layer']![0];
+    expect(firstLayer).toHaveProperty('id');
+    expect(firstLayer).toHaveProperty('localComponent');
+
+    const firstPanel = moduleDef.slots!['context-panel']![0];
+    expect(firstPanel).toHaveProperty('id');
+    expect(firstPanel).toHaveProperty('localComponent');
   });
 });
