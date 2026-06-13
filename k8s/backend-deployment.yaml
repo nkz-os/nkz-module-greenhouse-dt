@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:9b36502e9013c7944cae5f41c34531b2e5210525fbe2aa6f9a88d18c41abcd4c
+          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:03bc558d8fd09d327afad17972fabcce7fbb938291558a740fdaa9c8317a7888
           ports:
             - containerPort: 8420
               name: http
