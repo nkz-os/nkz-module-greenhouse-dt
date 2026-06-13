@@ -50,7 +50,8 @@ spec:
                   name: minio-secret
                   key: secret-key
             - name: CORS_ORIGINS
-              value: '["https://nekazari.robotika.cloud","http://localhost:3000"]'
+              # Production domain set via gitops-config overlay
+              value: '["https://YOUR_DOMAIN","http://localhost:3000"]'
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
