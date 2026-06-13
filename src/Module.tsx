@@ -13,6 +13,10 @@ export default defineModule({
   description: 'Monitorización y control de invernaderos con Digital Twin',
   accent: { base: '#059669', soft: '#D1FAE5', strong: '#047857' },
   icon: 'sprout',
+  data: {
+    entities: ['AgriGreenhouse', 'AgriSensor', 'Alert', 'AgriParcel'],
+    timeseries: ['temperature', 'relativeHumidity', 'humidity', 'leafWetness', 'solarIrradiance', 'co2', 'par'],
+  },
   main: MainPage,
   slots: moduleSlots as never,
 });
