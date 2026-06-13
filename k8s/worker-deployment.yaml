@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:7ab13c563f29a4052c7a8baa003d56cf551f30fdb4f2c4718ea4afb6df27ee5f
+          image: ghcr.io/nkz-os/nkz-module-greenhouse-dt/backend@sha256:9b36502e9013c7944cae5f41c34531b2e5210525fbe2aa6f9a88d18c41abcd4c
           command: ["celery", "-A", "app.celery_app:celery_app", "worker", "--loglevel=info"]
           env:
             - name: REDIS_PASSWORD
