@@ -3,14 +3,146 @@
  * context-panel slot widget for Greenhouse DT.
  *
  * Shows when an AgriGreenhouse entity is selected in the Unified Viewer.
- * Displays current state: temperature, humidity, VPD, leaf wetness, alerts.
+ * Displays current state: temperature, humidity, VPD, leaf wetness, CO₂, PAR,
+ * solar irradiance, zone details, alerts with expand/collapse, and last updated.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useViewer } from '@nekazari/sdk';
-import { AlertTriangle, Thermometer, Droplets, Wind, Leaf, Activity } from 'lucide-react';
+import {
+  AlertTriangle,
+  Thermometer,
+  Droplets,
+  Wind,
+  CloudDrizzle,
+  FlaskConical,
+  Sun,
+  SunMedium,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { greenhouseApi, GreenhouseState, Alert } from '../services/api';
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+/** Compute VPD (kPa) from temperature (°C) and relative humidity (%). */
+function computeVPD(temp: number, hum: number): number {
+  const es = 0.6108 * Math.exp((17.27 * temp) / (temp + 237.3));
+  const ea = es * (hum / 100);
+  return Math.max(0, es - ea);
+}
+
+type VPDRange = 'very_low' | 'low' | 'optimal' | 'high' | 'very_high';
+
+function getVPDRange(vpd: number): VPDRange {
+  if (vpd < 0.4) return 'very_low';
+  if (vpd < 0.8) return 'low';
+  if (vpd < 1.2) return 'optimal';
+  if (vpd < 1.6) return 'high';
+  return 'very_high';
+}
+
+function getVPDStyle(vpd: number): { bg: string; text: string; dot: string } {
+  const range = getVPDRange(vpd);
+  switch (range) {
+    case 'very_low':
+      return { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' };
+    case 'low':
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500' };
+    case 'optimal':
+      return { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' };
+    case 'high':
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500' };
+    case 'very_high':
+      return { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' };
+  }
+}
+
+function getVPDLabelKey(vpd: number): string {
+  return `greenhouse.vpd_range_${getVPDRange(vpd)}`;
+}
+
+/** Find the most recent lastSeen across all sensors. */
+function getMostRecentSeen(
+  sensors: Array<{ lastSeen?: string }>,
+): string | undefined {
+  const dates = sensors
+    .map((s) => s.lastSeen)
+    .filter((d): d is string => !!d)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  return dates[0];
+}
+
+/** Format a date string as relative time (e.g. "12s", "2min", "1h"). */
+function formatRelativeTime(dateStr: string | undefined): string | null {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 0) return null;
+  if (diff < 5000) return '<5s';
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+}
+
+/** Returns true if the given date string is older than 5 minutes. */
+function isStale(dateStr: string | undefined): boolean {
+  if (!dateStr) return true;
+  return Date.now() - new Date(dateStr).getTime() > 5 * 60 * 1000;
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────
+
+function SkeletonMetricCard() {
+  return (
+    <div className="rounded-lg p-3 animate-pulse bg-gray-100">
+      <div className="flex items-center gap-2">
+        <div className="h-4 w-4 rounded bg-gray-300" />
+        <div className="h-3 w-16 rounded bg-gray-300" />
+      </div>
+      <div className="mt-1.5 h-5 w-12 rounded bg-gray-300" />
+    </div>
+  );
+}
+
+function SkeletonZoneCard() {
+  return (
+    <div className="border rounded-lg p-3 animate-pulse">
+      <div className="h-3 w-24 rounded bg-gray-200 mb-2" />
+      <div className="h-3 w-32 rounded bg-gray-200" />
+    </div>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  bgColor = 'bg-gray-50',
+  iconColor = 'text-gray-600',
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  bgColor?: string;
+  iconColor?: string;
+}) {
+  return (
+    <div className={`${bgColor} rounded-lg p-2 flex items-center gap-2`}>
+      <Icon className={`h-4 w-4 ${iconColor} shrink-0`} />
+      <div className="min-w-0">
+        <div className="text-xs text-gray-500 truncate">{label}</div>
+        <div className="font-semibold text-gray-900">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────
 
 const GreenhouseContextPanel: React.FC = () => {
   const { t } = useTranslation('greenhouse-dt');
@@ -19,6 +151,7 @@ const GreenhouseContextPanel: React.FC = () => {
   const [state, setState] = useState<GreenhouseState | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(false);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
 
   const greenhouseId: string | null =
     viewer.selectedEntityType === 'AgriGreenhouse' && viewer.selectedEntityId
@@ -40,41 +173,149 @@ const GreenhouseContextPanel: React.FC = () => {
       .then(([s, a]) => {
         setState(s);
         setAlerts(a);
+        setAlertsExpanded(false);
       })
-      .catch(() => {})
+      .catch(() => {
+        setState(null);
+        setAlerts([]);
+      })
       .finally(() => setLoading(false));
   }, [greenhouseId]);
+
+  // ── Derived metrics ──────────────────────────────────────────────────
+
+  const metrics = useMemo(() => {
+    if (!state) return null;
+
+    const allSensors = state.zones.flatMap((z) => z.sensors);
+
+    // ── Temperature ────────────────────────────────────
+    const temps = allSensors
+      .map((s) => s.temperature)
+      .filter((t): t is number => t !== undefined);
+    const avgTemp =
+      temps.length > 0
+        ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1)
+        : null;
+
+    // ── Humidity ───────────────────────────────────────
+    const hums = allSensors
+      .map((s) => s.relativeHumidity)
+      .filter((h): h is number => h !== undefined);
+    const avgHum =
+      hums.length > 0
+        ? (hums.reduce((a, b) => a + b, 0) / hums.length).toFixed(1)
+        : null;
+
+    // ── Leaf Wetness ───────────────────────────────────
+    const lwValues = allSensors
+      .map((s) => s.leafWetness)
+      .filter((l): l is number => l !== undefined);
+    const lwActive = lwValues.filter((l) => l === 1).length;
+    const lwPct = lwValues.length > 0 ? Math.round((lwActive / lwValues.length) * 100) : null;
+
+    // ── CO₂ ────────────────────────────────────────────
+    const co2Vals = allSensors
+      .map((s) => s.co2)
+      .filter((c): c is number => c !== undefined);
+    const avgCO2 =
+      co2Vals.length > 0
+        ? Math.round(co2Vals.reduce((a, b) => a + b, 0) / co2Vals.length)
+        : null;
+
+    // ── PAR ────────────────────────────────────────────
+    const parVals = allSensors
+      .map((s) => s.par)
+      .filter((p): p is number => p !== undefined);
+    const avgPAR =
+      parVals.length > 0
+        ? Math.round(parVals.reduce((a, b) => a + b, 0) / parVals.length)
+        : null;
+
+    // ── Solar Irradiance ───────────────────────────────
+    const solVals = allSensors
+      .map((s) => s.solarIrradiance)
+      .filter((s): s is number => s !== undefined);
+    const avgSol =
+      solVals.length > 0
+        ? Math.round(solVals.reduce((a, b) => a + b, 0) / solVals.length)
+        : null;
+
+    // ── VPD ────────────────────────────────────────────
+    let vpdValue: number | null = null;
+    if (avgTemp !== null && avgHum !== null) {
+      vpdValue = parseFloat(computeVPD(parseFloat(avgTemp), parseFloat(avgHum)).toFixed(2));
+    }
+
+    // ── Last seen ──────────────────────────────────────
+    const lastSeen = getMostRecentSeen(allSensors);
+
+    return {
+      avgTemp,
+      avgHum,
+      leafWetnessPct: lwPct,
+      leafWetnessActive: lwActive,
+      leafWetnessTotal: lwValues.length,
+      avgCO2,
+      avgPAR,
+      avgSol,
+      vpdValue,
+      lastSeen,
+    };
+  }, [state]);
+
+  // ── Early returns ────────────────────────────────────────────────────
 
   if (!greenhouseId) return null;
 
   if (loading) {
     return (
-      <div className="p-4 text-sm text-gray-500">
-        {t('greenhouse.loading') || 'Loading...'}
+      <div className="p-3 space-y-3 text-sm">
+        {/* Skeleton header */}
+        <div className="flex items-center gap-2 animate-pulse">
+          <div className="h-4 w-4 rounded bg-gray-300" />
+          <div className="h-4 w-36 rounded bg-gray-300" />
+        </div>
+        {/* Skeleton metric grid (3×2) */}
+        <div className="grid grid-cols-2 gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonMetricCard key={i} />
+          ))}
+        </div>
+        {/* Skeleton zone cards */}
+        <SkeletonZoneCard />
+        <SkeletonZoneCard />
+        {/* Skeleton alerts */}
+        <div className="animate-pulse">
+          <div className="h-3 w-24 rounded bg-gray-200 mb-1" />
+          <div className="h-10 rounded bg-gray-100" />
+        </div>
       </div>
     );
   }
 
-  // Compute global aggregates across all zones
-  const allTemps = state?.zones.flatMap(z => z.sensors.map(s => s.temperature).filter((t): t is number => t !== undefined)) || [];
-  const allHums = state?.zones.flatMap(z => z.sensors.map(s => s.relativeHumidity).filter((h): h is number => h !== undefined)) || [];
-  const avgTemp = allTemps.length ? (allTemps.reduce((a, b) => a + b, 0) / allTemps.length).toFixed(1) : '--';
-  const avgHum = allHums.length ? (allHums.reduce((a, b) => a + b, 0) / allHums.length).toFixed(1) : '--';
+  if (!state) {
+    return (
+      <div className="p-3 text-sm text-gray-500">
+        {t('greenhouse.no_data')}
+      </div>
+    );
+  }
 
-  // VPD calculation (simplified)
-  const es = avgTemp !== '--' && avgHum !== '--'
-    ? (0.6108 * Math.exp((17.27 * parseFloat(avgTemp)) / (parseFloat(avgTemp) + 237.3))).toFixed(2)
-    : '--';
-  const ea = es !== '--' && avgHum !== '--'
-    ? (parseFloat(es) * parseFloat(avgHum) / 100).toFixed(2)
-    : '--';
-  const vpd = es !== '--' && ea !== '--'
-    ? (parseFloat(es) - parseFloat(ea)).toFixed(2)
-    : '--';
+  // ── Derived display values ───────────────────────────────────────────
+
+  const noData = t('greenhouse.no_data');
+  const lastSeenStr = metrics?.lastSeen ? formatRelativeTime(metrics.lastSeen) : null;
+  const stale = metrics?.lastSeen ? isStale(metrics.lastSeen) : false;
+
+  const visibleAlerts = alertsExpanded ? alerts : alerts.slice(0, 5);
+  const hasMoreAlerts = alerts.length > 5 && !alertsExpanded;
+
+  // ── Render ───────────────────────────────────────────────────────────
 
   return (
     <div className="p-3 space-y-3 text-sm">
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────── */}
       <div className="flex items-center gap-2">
         <Activity className="h-4 w-4 text-nkz-primary" />
         <h3 className="font-semibold text-gray-900">
@@ -82,90 +323,240 @@ const GreenhouseContextPanel: React.FC = () => {
         </h3>
       </div>
 
-      {/* Current conditions */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-blue-50 rounded-lg p-2 flex items-center gap-2">
-          <Thermometer className="h-4 w-4 text-blue-600" />
-          <div>
-            <div className="text-xs text-gray-500">{t('greenhouse.temperature')}</div>
-            <div className="font-semibold">{avgTemp}°C</div>
-          </div>
-        </div>
-        <div className="bg-green-50 rounded-lg p-2 flex items-center gap-2">
-          <Droplets className="h-4 w-4 text-green-600" />
-          <div>
-            <div className="text-xs text-gray-500">{t('greenhouse.humidity')}</div>
-            <div className="font-semibold">{avgHum}%</div>
-          </div>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-2 flex items-center gap-2">
-          <Wind className="h-4 w-4 text-purple-600" />
-          <div>
-            <div className="text-xs text-gray-500">{t('greenhouse.vpd')}</div>
-            <div className="font-semibold">{vpd} kPa</div>
-          </div>
-        </div>
-        <div className="bg-amber-50 rounded-lg p-2 flex items-center gap-2">
-          <Leaf className="h-4 w-4 text-amber-600" />
-          <div>
-            <div className="text-xs text-gray-500">{t('greenhouse.sensors')}</div>
-            <div className="font-semibold">{state?.total_sensors || 0}</div>
-          </div>
-        </div>
+      {/* ── Last updated ────────────────────────────────── */}
+      <div
+        className={`text-xs ${stale ? 'text-amber-600 font-medium' : 'text-gray-400'}`}
+      >
+        {t('greenhouse.last_seen')}: {lastSeenStr ?? '--'}
       </div>
 
-      {/* Zones summary */}
-      {state?.zones.map((zone) => (
-        <div key={zone.zone_id} className="border rounded-lg p-2">
-          <div className="text-xs font-medium text-gray-500 mb-1">
-            {zone.zone_id.split('-').pop()} ({zone.sensor_count} sensores)
-          </div>
-          <div className="text-xs text-gray-600">
-            {zone.aggregates.avg_temperature !== null && (
-              <span className="mr-3">Ø {zone.aggregates.avg_temperature}°C</span>
-            )}
-            {zone.aggregates.min_temperature !== null && (
-              <span className="mr-3">↓ {zone.aggregates.min_temperature}°C</span>
-            )}
-            {zone.aggregates.max_temperature !== null && (
-              <span>↑ {zone.aggregates.max_temperature}°C</span>
-            )}
-          </div>
-        </div>
-      ))}
+      {/* ── Metric grid (2 cols, auto rows) ─────────────── */}
+      <div className="grid grid-cols-2 gap-2">
+        {/* Temperature */}
+        <MetricCard
+          icon={Thermometer}
+          label={t('greenhouse.temperature')}
+          value={metrics?.avgTemp !== null ? `${metrics?.avgTemp}°C` : noData}
+          bgColor="bg-blue-50"
+          iconColor="text-blue-600"
+        />
 
-      {/* Alerts */}
-      {alerts.length > 0 && (
+        {/* Humidity */}
+        <MetricCard
+          icon={Droplets}
+          label={t('greenhouse.humidity')}
+          value={metrics?.avgHum !== null ? `${metrics?.avgHum}%` : noData}
+          bgColor="bg-green-50"
+          iconColor="text-green-600"
+        />
+
+        {/* Leaf Wetness */}
+        <MetricCard
+          icon={CloudDrizzle}
+          label={t('greenhouse.leaf_wetness')}
+          value={
+            metrics?.leafWetnessPct != null
+              ? `${metrics.leafWetnessPct}%`
+              : noData
+          }
+          bgColor="bg-cyan-50"
+          iconColor="text-cyan-600"
+        />
+
+        {/* CO₂ */}
+        <MetricCard
+          icon={FlaskConical}
+          label={t('greenhouse.co2')}
+          value={metrics?.avgCO2 != null ? `${metrics.avgCO2} ppm` : noData}
+          bgColor="bg-gray-50"
+          iconColor="text-gray-600"
+        />
+
+        {/* PAR */}
+        <MetricCard
+          icon={Sun}
+          label={t('greenhouse.par')}
+          value={
+            metrics?.avgPAR != null ? `${metrics.avgPAR} μmol/m²/s` : noData
+          }
+          bgColor="bg-amber-50"
+          iconColor="text-amber-600"
+        />
+
+        {/* Solar Irradiance */}
+        <MetricCard
+          icon={SunMedium}
+          label={t('greenhouse.solar_irradiance')}
+          value={metrics?.avgSol != null ? `${metrics.avgSol} W/m²` : noData}
+          bgColor="bg-orange-50"
+          iconColor="text-orange-600"
+        />
+      </div>
+
+      {/* ── VPD with range indicator ────────────────────── */}
+      {(() => {
+        const vpd = metrics?.vpdValue;
+        if (vpd == null) {
+          return (
+            <div className="rounded-lg p-3 bg-gray-50">
+              <div className="flex items-center gap-2">
+                <Wind className="h-4 w-4 text-gray-400" />
+                <div>
+                  <div className="text-xs text-gray-500">{t('greenhouse.vpd')}</div>
+                  <div className="font-semibold text-gray-400">{noData}</div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        const vpdStyle = getVPDStyle(vpd);
+        return (
+          <div className={`rounded-lg p-3 ${vpdStyle.bg}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wind className={`h-4 w-4 ${vpdStyle.text}`} />
+                <div>
+                  <div className="text-xs text-gray-500">{t('greenhouse.vpd')}</div>
+                  <div className={`font-semibold ${vpdStyle.text}`}>
+                    {vpd} kPa
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`inline-block h-2 w-2 rounded-full ${vpdStyle.dot}`} />
+                <span className={`text-xs font-medium ${vpdStyle.text}`}>
+                  {t(getVPDLabelKey(vpd))}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Zone cards ──────────────────────────────────── */}
+      {state.zones.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-gray-500 mb-1">
+            {t('greenhouse.zones')}
+          </h4>
+          {state.zones.map((zone) => {
+            // Zone-level leaf wetness
+            const zoneLW = zone.sensors
+              .map((s) => s.leafWetness)
+              .filter((l): l is number => l !== undefined);
+            const zoneLWActive = zoneLW.filter((l) => l === 1).length;
+
+            return (
+              <div
+                key={zone.zone_id}
+                className="border rounded-lg p-2 mb-1 last:mb-0"
+              >
+                <div className="text-xs font-medium text-gray-500 mb-1 flex items-center justify-between">
+                  <span>
+                    {zone.zone_id.split('-').pop()} ({zone.sensor_count}{' '}
+                    {t('greenhouse.sensors')})
+                  </span>
+                </div>
+
+                {/* Temperature aggregate */}
+                <div className="text-xs text-gray-600 space-x-3">
+                  {zone.aggregates.avg_temperature !== undefined && (
+                    <span>Ø {zone.aggregates.avg_temperature}°C</span>
+                  )}
+                  {zone.aggregates.min_temperature !== undefined && (
+                    <span>↓ {zone.aggregates.min_temperature}°C</span>
+                  )}
+                  {zone.aggregates.max_temperature !== undefined && (
+                    <span>↑ {zone.aggregates.max_temperature}°C</span>
+                  )}
+                  {zone.aggregates.avg_humidity !== undefined && (
+                    <span>Ø {zone.aggregates.avg_humidity}% RH</span>
+                  )}
+                </div>
+
+                {/* Leaf wetness indicator */}
+                {zoneLW.length > 0 && (
+                  <div className="text-xs text-cyan-600 mt-0.5 flex items-center gap-1">
+                    <CloudDrizzle className="h-3 w-3" />
+                    <span>
+                      {zoneLWActive}/{zoneLW.length} {t('greenhouse.sensors_wet')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Alerts section ──────────────────────────────── */}
+      {alerts.length > 0 ? (
         <div>
           <div className="flex items-center gap-1 text-xs font-medium text-red-600 mb-1">
             <AlertTriangle className="h-3 w-3" />
             {t('greenhouse.active_alerts')} ({alerts.length})
           </div>
-          {alerts.slice(0, 3).map((alert) => (
-            <div
-              key={alert.id}
-              className={`text-xs p-2 rounded mb-1 ${
-                alert.severity === 'critical' || alert.severity === 'high'
-                  ? 'bg-red-50 text-red-700'
-                  : 'bg-yellow-50 text-yellow-700'
-              }`}
+
+          {visibleAlerts.map((alert) => {
+            let sevClasses: string;
+            if (alert.severity === 'critical' || alert.severity === 'high') {
+              sevClasses = 'bg-red-50 text-red-700';
+            } else if (alert.severity === 'medium') {
+              sevClasses = 'bg-yellow-50 text-yellow-700';
+            } else {
+              sevClasses = 'bg-blue-50 text-blue-700';
+            }
+
+            return (
+              <div
+                key={alert.id}
+                className={`text-xs p-2 rounded mb-1 ${sevClasses}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium truncate">{alert.name}</span>
+                  {alert.subCategory && (
+                    <span className="shrink-0 px-1 py-0.5 rounded bg-white/60 text-[10px] uppercase tracking-wider whitespace-nowrap">
+                      {alert.subCategory.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </div>
+                {alert.description && (
+                  <div className="truncate mt-0.5 opacity-80">
+                    {alert.description}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {hasMoreAlerts && (
+            <button
+              onClick={() => setAlertsExpanded(true)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-1"
+              aria-expanded={false}
             >
-              <div className="font-medium">{alert.name}</div>
-              <div className="truncate">{alert.description}</div>
-            </div>
-          ))}
+              <ChevronDown className="h-3 w-3" />
+              {t('greenhouse.show_more', { count: alerts.length - 5 })}
+            </button>
+          )}
+
+          {alertsExpanded && alerts.length > 5 && (
+            <button
+              onClick={() => setAlertsExpanded(false)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-1"
+              aria-expanded={true}
+            >
+              <ChevronUp className="h-3 w-3" />
+              {t('greenhouse.show_less')}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="text-xs text-gray-400 flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" />
+          {t('greenhouse.no_active_alerts')}
         </div>
       )}
-
-      {/* Auto-Pilot status (placeholder for Phase 4) */}
-      <div className="border-t pt-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">{t('greenhouse.mpc_status')}</span>
-          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-xs">
-            {t('greenhouse.mpc_inactive')}
-          </span>
-        </div>
-      </div>
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import { i18n } from '@nekazari/sdk';
 import en from './locales/en.json';
 import es from './locales/es.json';
+import eu from './locales/eu.json';
 
 const NS = 'greenhouse-dt';
 
@@ -9,6 +10,7 @@ function register(): void {
   if (typeof add !== 'function') return;
   add.call(i18n, 'en', NS, en, true, true);
   add.call(i18n, 'es', NS, es, true, true);
+  add.call(i18n, 'eu', NS, eu, true, true);
 }
 
 register();

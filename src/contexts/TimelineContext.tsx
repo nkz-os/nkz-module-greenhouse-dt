@@ -19,11 +19,15 @@ import React, { createContext, useContext, useState, useCallback, useMemo, React
 import type { ReconstructionResult } from '../services/api';
 
 export type TimelineVariable = 'temperature' | 'humidity' | 'leafWetness' | 'co2' | 'par';
+export type PlayDirection = 'forward' | 'backward';
 
 interface TimelineState {
   currentTime: Date;
   variable: TimelineVariable;
   playing: boolean;
+  direction: PlayDirection;
+  rangeHours: number;
+  detail: string | null;
   displayUrl: string | null;
   cogUrl: string | null;
   stats: { min: number; max: number; mean: number } | null;
@@ -34,6 +38,8 @@ interface TimelineState {
   setCurrentTime: (t: Date) => void;
   setVariable: (v: TimelineVariable) => void;
   setPlaying: (p: boolean) => void;
+  setDirection: (d: PlayDirection) => void;
+  setRangeHours: (h: number) => void;
   setReconstruction: (data: ReconstructionResult) => void;
   setLoading: (l: boolean) => void;
 }
@@ -45,6 +51,9 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState<Date>(now);
   const [variable, setVariable] = useState<TimelineVariable>('temperature');
   const [playing, setPlaying] = useState(false);
+  const [direction, setDirection] = useState<PlayDirection>('forward');
+  const [rangeHours, setRangeHours] = useState(72);
+  const [detail, setDetail] = useState<string | null>(null);
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [cogUrl, setCogUrl] = useState<string | null>(null);
   const [stats, setStats] = useState<{ min: number; max: number; mean: number } | null>(null);
@@ -67,12 +76,22 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     setPlaying(p);
   }, []);
 
+  const handleSetDirection = useCallback((d: PlayDirection) => {
+    setDirection(d);
+  }, []);
+
+  const handleSetRangeHours = useCallback((h: number) => {
+    setRangeHours(h);
+    setDirty(true);
+  }, [setDirty]);
+
   const handleSetReconstruction = useCallback((data: ReconstructionResult) => {
     setDisplayUrl(data.display_url);
     setCogUrl(data.cog_url);
     setStats(data.stats);
     setBounds(data.bounds);
     setSensorCount(data.sensor_count);
+    setDetail(data.detail ?? null);
     setDirty(false);
     setLoading(false);
   }, []);
@@ -81,6 +100,9 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     currentTime,
     variable,
     playing,
+    direction,
+    rangeHours,
+    detail,
     displayUrl,
     cogUrl,
     stats,
@@ -91,12 +113,15 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     setCurrentTime: handleSetCurrentTime,
     setVariable: handleSetVariable,
     setPlaying: handleSetPlaying,
+    setDirection: handleSetDirection,
+    setRangeHours: handleSetRangeHours,
     setReconstruction: handleSetReconstruction,
     setLoading,
   }), [
-    currentTime, variable, playing,
+    currentTime, variable, playing, direction, rangeHours, detail,
     displayUrl, cogUrl, stats, bounds, sensorCount, dirty, loading,
     handleSetCurrentTime, handleSetVariable, handleSetPlaying,
+    handleSetDirection, handleSetRangeHours,
     handleSetReconstruction, setLoading,
   ]);
 

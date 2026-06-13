@@ -1,11 +1,17 @@
 // src/slots/greenhouse-shell.tsx
 /**
- * GreenhouseShell: renders the semi-transparent greenhouse structure on Cesium.
+ * GreenhouseShell: renders a procedural 3D greenhouse structure on Cesium.
  *
- * Uses Cesium.Entity with model.uri and color.withAlpha(0.35) for the shell,
- * and separate entities for internal crop rows and sensor points.
+ * Instead of loading a glTF model (which doesn't exist), draws a semi-transparent
+ * extruded polygon (box) using Cesium primitives at the real greenhouse location.
  *
- * This component is rendered inside the map-layer slot of the Unified Viewer.
+ * Extracts position from GeoJSON location (Point or Polygon centroid).
+ * Calculates box dimensions from area (sqm) with 2:1 aspect ratio.
+ * Applies orientation (N-S / E-W / angle) and color based on coverType.
+ *
+ * Sensor points and zone polygons are rendered on top of the box.
+ * Loading/error states are shown as Cesium labels and descriptions.
+ *
  * Uses useViewer() from @nekazari/sdk to access the cesiumViewer.
  */
 
@@ -15,35 +21,195 @@ import { useTimelineContextOptional } from '../contexts/TimelineContext';
 
 interface GreenhouseShellProps {
   greenhouseId: string;
-  modelUrl?: string;
-  position: {
-    lon: number;
-    lat: number;
-    height?: number;
-  };
-  scale?: number;
+  /** GeoJSON location from API — Point or Polygon */
+  location?: { type: string; coordinates: any };
+  /** Greenhouse area in square meters */
+  area?: number;
+  /** Greenhouse height in meters (default 4) */
+  height?: number;
+  /** Cover type: polyethylene, glass, polycarbonate */
+  coverType?: string;
+  /** Orientation: 'N-S', 'E-W', or a decimal angle */
+  orientation?: string;
+  /** Array of sensor points with temperature/humidity */
   sensors?: Array<{
     id: string;
     temperature?: number;
     humidity?: number;
     location?: { type: string; coordinates: number[] };
   }>;
+  /** Array of zone polygon definitions */
   zonePolygons?: Array<{
     id: string;
     name: string;
     coordinates: number[][][];
   }>;
-  onSensorClick?: (sensorId: string) => void;
   shellOpacity?: number;
+  /** When true, shows "Loading sensors..." label above the greenhouse */
+  loading?: boolean;
+  /** Error message shown in the greenhouse description popup */
+  error?: string | null;
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Extract lon/lat from a GeoJSON location object.
+ * For Point: uses coordinates directly.
+ * For Polygon: computes centroid of the first ring (excludes closing vertex).
+ */
+function extractPosition(
+  location?: { type: string; coordinates: any }
+): { lon: number; lat: number } | null {
+  if (!location || !location.type || !location.coordinates) return null;
+  try {
+    if (location.type === 'Point' && location.coordinates.length >= 2) {
+      return { lon: location.coordinates[0], lat: location.coordinates[1] };
+    }
+    if (location.type === 'Polygon') {
+      const ring = location.coordinates[0];
+      if (!ring || ring.length < 3) return null;
+      // The ring may close itself (last coord === first). If so, exclude it.
+      const last = ring[ring.length - 1];
+      const first = ring[0];
+      const n =
+        last[0] === first[0] && last[1] === first[1] ? ring.length - 1 : ring.length;
+      let lonSum = 0;
+      let latSum = 0;
+      for (let i = 0; i < n; i++) {
+        lonSum += ring[i][0];
+        latSum += ring[i][1];
+      }
+      return { lon: lonSum / n, lat: latSum / n };
+    }
+  } catch {
+    // Malformed location — return null
+  }
+  return null;
+}
+
+/**
+ * Parse orientation string to a rotation angle in degrees.
+ * 'N-S' → 0, 'E-W' → 90, numeric string → parsed float, else 0.
+ */
+function parseOrientation(orientation?: string): number {
+  if (!orientation) return 0;
+  const lower = orientation.toLowerCase().trim();
+  if (lower === 'n-s' || lower === 'ns') return 0;
+  if (lower === 'e-w' || lower === 'ew') return 90;
+  const num = parseFloat(lower);
+  return isNaN(num) ? 0 : num;
+}
+
+/** Map cover type → fill color with the given opacity. */
+function getCoverColor(Cesium: any, coverType?: string, opacity = 0.35): any {
+  const hex: Record<string, string> = {
+    polyethylene: `rgba(0, 200, 200, ${opacity})`,
+    glass: `rgba(100, 150, 255, ${opacity})`,
+    polycarbonate: `rgba(100, 200, 100, ${opacity})`,
+  };
+  return Cesium.Color.fromCssColorString(
+    hex[coverType?.toLowerCase() || ''] || `rgba(0, 200, 200, ${opacity})`
+  );
+}
+
+/** Map cover type → outline color. */
+function getCoverOutlineColor(Cesium: any, coverType?: string): any {
+  const hex: Record<string, string> = {
+    polyethylene: 'rgba(0, 200, 200, 0.8)',
+    glass: 'rgba(100, 150, 255, 0.8)',
+    polycarbonate: 'rgba(100, 200, 100, 0.8)',
+  };
+  return Cesium.Color.fromCssColorString(
+    hex[coverType?.toLowerCase() || ''] || 'rgba(0, 200, 200, 0.8)'
+  );
+}
+
+/**
+ * Compute the 4 corners of a rectangle centred at (lon, lat).
+ *
+ * @param lon  Centre longitude (degrees).
+ * @param lat  Centre latitude (degrees).
+ * @param widthM  Rectangle width (E-W span at 0° orientation) in metres.
+ * @param lengthM  Rectangle length (N-S span at 0° orientation) in metres.
+ * @param orientationDeg  Clockwise rotation in degrees.
+ * @returns Flat array [lon0, lat0, lon1, lat1, lon2, lat2, lon3, lat3]
+ *          suitable for Cesium.Cartesian3.fromDegreesArray().
+ */
+function getRectangleCorners(
+  lon: number,
+  lat: number,
+  widthM: number,
+  lengthM: number,
+  orientationDeg: number,
+): number[] {
+  const latRad = (lat * Math.PI) / 180;
+  const mPerDeg = 111_320;
+  const lonPerDeg = mPerDeg * Math.cos(latRad);
+
+  const halfW = (widthM / 2) / lonPerDeg;
+  const halfL = (lengthM / 2) / mPerDeg;
+
+  // Local unrotated corners (centre relative, length = N-S at 0°)
+  const corners: [number, number][] = [
+    [-halfW, -halfL],
+    [halfW, -halfL],
+    [halfW, halfL],
+    [-halfW, halfL],
+  ];
+
+  // Rotate
+  const ang = (orientationDeg * Math.PI) / 180;
+  const sinA = Math.sin(ang);
+  const cosA = Math.cos(ang);
+
+  const out: number[] = [];
+  for (const [dx, dy] of corners) {
+    out.push(lon + dx * cosA - dy * sinA);
+    out.push(lat + dx * sinA + dy * cosA);
+  }
+  return out;
+}
+
+/** Build the entity description HTML, optionally including an error banner. */
+function buildDescription(
+  greenhouseId: string,
+  coverType: string | undefined,
+  areaM2: number,
+  heightM: number,
+  sensorCount: number,
+  zoneCount: number,
+  error?: string | null,
+): string {
+  const lines: string[] = [
+    '<div>',
+    `<h3>Greenhouse ${greenhouseId}</h3>`,
+    `<p>${sensorCount} sensors · ${zoneCount} zones</p>`,
+    `<p>Cover: ${coverType || 'unknown'} · ${areaM2.toFixed(0)} m² · ${heightM.toFixed(1)} m</p>`,
+  ];
+  if (error) {
+    lines.push('<p style="color:red;font-weight:bold;">⚠️ ' + error + '</p>');
+  }
+  lines.push('</div>');
+  return lines.join('\n');
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
+const DEFAULT_HEIGHT = 4; // metres
+const DEFAULT_AREA = 500; // square metres
 
 const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
   greenhouseId,
-  modelUrl,
-  position,
-  scale = 1,
+  location,
+  area,
+  height,
+  coverType,
+  orientation,
   sensors = [],
   zonePolygons = [],
+  loading = false,
+  error = null,
   shellOpacity = 0.35,
 }) => {
   const viewerCtx = useViewer();
@@ -63,42 +229,72 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     const viewerInstance = viewer;
     const entities = entitiesRef.current;
 
-    // Clean up previous entities
+    // ── Clean up previous entities ──────────────────────────────────────
     entities.forEach((entity: any) => {
       viewerInstance.entities.remove(entity);
     });
     entities.clear();
 
-    // 1. Render greenhouse shell (semi-transparent glTF model)
-    if (modelUrl) {
-      const shellPosition = Cesium.Cartesian3.fromDegrees(
-        position.lon,
-        position.lat,
-        position.height || 0
-      );
+    let heatmapLayer: any = null;
 
-      const shellEntity = viewerInstance.entities.add({
+    // ── 1. Extract position from GeoJSON ────────────────────────────────
+    const pos = extractPosition(location);
+
+    // ── 2. Draw procedural greenhouse box (extruded polygon) ────────────
+    if (pos) {
+      const boxHeight = height && height > 0 ? height : DEFAULT_HEIGHT;
+      const boxArea = area && area > 0 ? area : DEFAULT_AREA;
+      // 2:1 aspect ratio → width = sqrt(area/2), length = sqrt(2*area) = width * 2
+      const boxWidth = Math.sqrt(boxArea / 2);
+      const boxLength = boxWidth * 2;
+      const orientDeg = parseOrientation(orientation);
+      const corners = getRectangleCorners(pos.lon, pos.lat, boxWidth, boxLength, orientDeg);
+
+      const boxEntity = viewerInstance.entities.add({
         id: `greenhouse-shell-${greenhouseId}`,
-        position: shellPosition,
-        model: {
-          uri: modelUrl,
-          scale: scale,
-          minimumPixelSize: 64,
-          color: Cesium.Color.WHITE.withAlpha(shellOpacity),
-          silhouetteColor: Cesium.Color.CYAN,
-          silhouetteSize: 1,
+        polygon: {
+          hierarchy: Cesium.Cartesian3.fromDegreesArray(corners),
+          material: getCoverColor(Cesium, coverType, shellOpacity),
+          outline: true,
+          outlineColor: getCoverOutlineColor(Cesium, coverType),
+          outlineWidth: 2,
+          extrudedHeight: boxHeight,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         },
-        description: `
-          <div>
-            <h3>Greenhouse ${greenhouseId}</h3>
-            <p>${sensors.length} sensors · ${zonePolygons.length} zones</p>
-          </div>
-        `,
+        description: buildDescription(
+          greenhouseId,
+          coverType,
+          boxArea,
+          boxHeight,
+          sensors.length,
+          zonePolygons.length,
+          error,
+        ),
       });
-      entities.set(`greenhouse-shell-${greenhouseId}`, shellEntity);
+      entities.set(`greenhouse-shell-${greenhouseId}`, boxEntity);
+
+      // ── 3. Loading label (shown above the box while sensors fetch) ──
+      if (loading) {
+        const loadingLabel = viewerInstance.entities.add({
+          id: `greenhouse-loading-${greenhouseId}`,
+          position: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, boxHeight + 2),
+          label: {
+            text: 'Loading sensors...',
+            font: '14px sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            showBackground: true,
+            backgroundColor: Cesium.Color.BLACK.withAlpha(0.6),
+          },
+        });
+        entities.set(`greenhouse-loading-${greenhouseId}`, loadingLabel);
+      }
     }
 
-    // 2. Render sensor points with color-coded temperature
+    // ── 4. Render sensor points ─────────────────────────────────────────
     sensors.forEach((sensor) => {
       if (!sensor.location?.coordinates) return;
       const [lon, lat] = sensor.location.coordinates;
@@ -146,7 +342,7 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       entities.set(`sensor-${sensor.id}`, sensorEntity);
     });
 
-    // 3. Render zone polygons (optional)
+    // ── 5. Render zone polygons ─────────────────────────────────────────
     zonePolygons.forEach((zone) => {
       if (!zone.coordinates?.length) return;
 
@@ -154,7 +350,7 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
         id: `zone-${zone.id}`,
         polygon: {
           hierarchy: Cesium.Cartesian3.fromDegreesArray(
-            zone.coordinates[0].flat()
+            zone.coordinates[0].flat(),
           ),
           material: Cesium.Color.CYAN.withAlpha(0.1),
           outline: true,
@@ -174,21 +370,23 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       entities.set(`zone-${zone.id}`, polygonEntity);
     });
 
-    // 4. COG heatmap overlay (PNG with colormap from TimelineContext)
-    let heatmapLayer: any = null;
+    // ── 6. COG heatmap overlay from TimelineContext ─────────────────────
     if (timeline?.displayUrl && timeline?.bounds && viewerInstance) {
       heatmapLayer = viewerInstance.imageryLayers.addImageryProvider(
         new Cesium.SingleTileImageryProvider({
           url: timeline.displayUrl,
           rectangle: Cesium.Rectangle.fromDegrees(
-            timeline.bounds[0], timeline.bounds[1],
-            timeline.bounds[2], timeline.bounds[3]
+            timeline.bounds[0],
+            timeline.bounds[1],
+            timeline.bounds[2],
+            timeline.bounds[3],
           ),
-        })
+        }),
       );
       heatmapLayer.alpha = 0.6;
     }
 
+    // ── Cleanup on unmount or deps change ───────────────────────────────
     return () => {
       entities.forEach((entity: any) => {
         if (!viewerInstance.isDestroyed()) {
@@ -201,9 +399,20 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
       }
     };
   }, [
-    viewer, greenhouseId, modelUrl, position, scale,
-    sensors, zonePolygons, shellOpacity,
-    timeline?.displayUrl, timeline?.bounds,
+    viewer,
+    greenhouseId,
+    location,
+    area,
+    height,
+    coverType,
+    orientation,
+    sensors,
+    zonePolygons,
+    loading,
+    error,
+    shellOpacity,
+    timeline?.displayUrl,
+    timeline?.bounds,
   ]);
 
   return null;

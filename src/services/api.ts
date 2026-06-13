@@ -36,6 +36,7 @@ export interface AgriSensorState {
   leafWetness?: number;
   solarIrradiance?: number;
   co2?: number;
+  par?: number;
   batteryLevel?: number;
   lastSeen?: string;
   location?: any;
