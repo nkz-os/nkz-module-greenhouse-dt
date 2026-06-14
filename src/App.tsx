@@ -11,7 +11,7 @@
 import './i18n';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@nekazari/sdk';
-import { AlertCircle, RefreshCw, Building2 } from 'lucide-react';
+import { AlertCircle, RefreshCw, Building2, ArrowRight, ExternalLink } from 'lucide-react';
 import { greenhouseApi, type Greenhouse, type GreenhouseState, type Alert } from './services/api';
 import { DashboardSummary } from './components/DashboardSummary';
 import { GreenhouseCard } from './components/GreenhouseCard';
@@ -211,11 +211,50 @@ function EmptyState() {
   const { t } = useTranslation('greenhouse-dt');
 
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center">
-      <Building2 className="h-10 w-10 text-gray-300" />
-      <p className="text-sm font-medium text-gray-600">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-6 py-16 text-center">
+      <Building2 className="h-10 w-10 text-emerald-400" />
+      <p className="text-sm font-medium text-emerald-800">
         {t('greenhouse.no_greenhouses')}
       </p>
+      <p className="text-xs text-emerald-600 max-w-md">
+        {t('greenhouse.create_from_viewer')}
+      </p>
+      <a
+        href="https://nekazari.robotika.cloud"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        {t('greenhouse.open_viewer')}
+        <ArrowRight className="h-3.5 w-3.5" />
+      </a>
+    </div>
+  );
+}
+
+/* ── Create-from-viewer banner ────────────────────────────────────────── */
+
+function CreateBanner() {
+  const { t } = useTranslation('greenhouse-dt');
+
+  return (
+    <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+      <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+      <div>
+        <p className="font-medium text-emerald-800">
+          {t('greenhouse.create_from_viewer')}
+        </p>
+        <a
+          href="https://nekazari.robotika.cloud"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+        >
+          {t('greenhouse.open_viewer')}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
     </div>
   );
 }
@@ -245,6 +284,9 @@ const App: React.FC = () => {
           {t('greenhouse.list_title')}
         </p>
       </div>
+
+      {/* Create-from-viewer banner — always visible */}
+      {!loading && <CreateBanner />}
 
       {/* Summary cards */}
       <div className="mb-8">

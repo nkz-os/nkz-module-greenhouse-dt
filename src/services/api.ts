@@ -25,6 +25,9 @@ export interface Greenhouse {
   height?: number;
   coverType?: string;
   orientation?: string;
+  ref3DModel?: string;
+  modelScale?: number;
+  modelRotation?: number[];
 }
 
 export interface AgriSensorState {

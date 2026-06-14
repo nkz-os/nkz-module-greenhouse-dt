@@ -53,7 +53,9 @@
     "sensors_wet": "sensors wet",
     "show_more": "Show {count} more",
     "show_less": "Show less",
-    "no_data": "—"
+    "no_data": "—",
+    "create_from_viewer": "Greenhouses are created from the Unified Viewer. Open the map, use the entity creation wizard, and select «Greenhouse».",
+    "open_viewer": "Open unified viewer"
   },
   "time_machine": {
     "rewind": "Latest",

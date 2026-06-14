@@ -107,6 +107,9 @@ const GreenhouseMapLayer: React.FC<MapLayerProps> = ({ greenhouseId }) => {
       height={detail?.height}
       coverType={detail?.coverType}
       orientation={detail?.orientation}
+      modelUrl={detail?.ref3DModel}
+      modelRotation={detail?.modelRotation}
+      modelScale={detail?.modelScale}
       sensors={sensors}
       shellOpacity={0.35}
     />

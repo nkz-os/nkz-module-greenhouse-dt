@@ -45,6 +45,9 @@ def build_greenhouse_entity(
     height: Optional[float] = None,
     cover_type: Optional[str] = None,
     orientation: Optional[str] = None,
+    ref_3d_model: Optional[str] = None,
+    model_scale: Optional[float] = None,
+    model_rotation: Optional[list[float]] = None,
 ) -> dict:
     """Build an AgriGreenhouse NGSI-LD entity payload.
 
@@ -52,6 +55,9 @@ def build_greenhouse_entity(
     sends Content-Type: application/ld+json but does NOT inject @context.
     Uses SDM standard attributes. refAgriGreenhouse is legacy;
     new code uses hasAgriParcel for child relationships.
+
+    Supports optional 3D model via ref3DModel + modelScale + modelRotation
+    (heading, pitch, roll in degrees, matching Cesium HeadingPitchRoll).
     """
     entity = {
         "@context": settings.context_url,
@@ -86,7 +92,14 @@ def build_greenhouse_entity(
     
     if orientation:
         entity["orientation"] = {"type": "Property", "value": orientation}
-    
+
+    if ref_3d_model:
+        entity["ref3DModel"] = {"type": "Property", "value": ref_3d_model}
+    if model_scale is not None:
+        entity["modelScale"] = {"type": "Property", "value": model_scale}
+    if model_rotation is not None:
+        entity["modelRotation"] = {"type": "Property", "value": model_rotation}
+
     return entity
 
 

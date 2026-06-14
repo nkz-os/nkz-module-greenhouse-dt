@@ -46,6 +46,9 @@ class AgriGreenhouseCreate(BaseModel):
     ventilationType: Optional[str] = None
     shadingType: Optional[str] = None
     heatingType: Optional[str] = None
+    ref3DModel: Optional[str] = None  # URL del GLB en MinIO
+    modelScale: Optional[float] = None
+    modelRotation: Optional[list[float]] = None  # [heading, pitch, roll] en grados
 
 
 class AgriGreenhouseResponse(BaseModel):
@@ -65,6 +68,9 @@ class AgriGreenhouseResponse(BaseModel):
     heatingType: Optional[str] = None
     rowSpacing: Optional[float] = None
     plantDensity: Optional[float] = None
+    ref3DModel: Optional[str] = None
+    modelScale: Optional[float] = None
+    modelRotation: Optional[list[float]] = None
 
 
 # ── AgriSensor (for internal sensors) ─────────────────────────────────────────

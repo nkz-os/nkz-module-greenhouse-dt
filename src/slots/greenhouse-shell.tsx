@@ -1,9 +1,13 @@
 // src/slots/greenhouse-shell.tsx
 /**
- * GreenhouseShell: renders a procedural 3D greenhouse structure on Cesium.
+ * GreenhouseShell: renders a greenhouse on Cesium.
  *
- * Instead of loading a glTF model (which doesn't exist), draws a semi-transparent
- * extruded polygon (box) using Cesium primitives at the real greenhouse location.
+ * If ref3DModel (GLB) is available on the entity, loads the 3D model with
+ * modelRotation [heading, pitch, roll] for orientation matching the platform's
+ * CesiumMap pattern (sensors, trackers, machines).
+ *
+ * Otherwise, draws a semi-transparent extruded polygon (box) using Cesium
+ * primitives at the real greenhouse location.
  *
  * Extracts position from GeoJSON location (Point or Polygon centroid).
  * Calculates box dimensions from area (sqm) with 2:1 aspect ratio.
@@ -31,6 +35,12 @@ interface GreenhouseShellProps {
   coverType?: string;
   /** Orientation: 'N-S', 'E-W', or a decimal angle */
   orientation?: string;
+  /** 3D model URL (GLB) from ref3DModel — overrides procedural box */
+  modelUrl?: string;
+  /** 3D model rotation [heading, pitch, roll] in degrees */
+  modelRotation?: number[];
+  /** 3D model scale factor */
+  modelScale?: number;
   /** Array of sensor points with temperature/humidity */
   sensors?: Array<{
     id: string;
@@ -206,6 +216,9 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
   height,
   coverType,
   orientation,
+  modelUrl,
+  modelRotation,
+  modelScale,
   sensors = [],
   zonePolygons = [],
   loading = false,
@@ -240,44 +253,81 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     // ── 1. Extract position from GeoJSON ────────────────────────────────
     const pos = extractPosition(location);
 
-    // ── 2. Draw procedural greenhouse box (extruded polygon) ────────────
+    // ── 2. Render greenhouse: GLB model if available, else procedural box ─
     if (pos) {
-      const boxHeight = height && height > 0 ? height : DEFAULT_HEIGHT;
-      const boxArea = area && area > 0 ? area : DEFAULT_AREA;
-      // 2:1 aspect ratio → width = sqrt(area/2), length = sqrt(2*area) = width * 2
-      const boxWidth = Math.sqrt(boxArea / 2);
-      const boxLength = boxWidth * 2;
-      const orientDeg = parseOrientation(orientation);
-      const corners = getRectangleCorners(pos.lon, pos.lat, boxWidth, boxLength, orientDeg);
+      if (modelUrl) {
+        // ── 2a. 3D model (GLB) — uses HeadingPitchRoll like sensors/trackers
+        const scale = modelScale && modelScale > 0 ? modelScale : 1;
+        const rot = modelRotation || [0, 0, 0];
+        const heading = Cesium.Math.toRadians(rot[0] || 0);
+        const pitch = Cesium.Math.toRadians(rot[1] || 0);
+        const roll = Cesium.Math.toRadians(rot[2] || 0);
+        const position = Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, 0);
+        const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+        const orientationQuat = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
 
-      const boxEntity = viewerInstance.entities.add({
-        id: `greenhouse-shell-${greenhouseId}`,
-        polygon: {
-          hierarchy: Cesium.Cartesian3.fromDegreesArray(corners),
-          material: getCoverColor(Cesium, coverType, shellOpacity),
-          outline: true,
-          outlineColor: getCoverOutlineColor(Cesium, coverType),
-          outlineWidth: 2,
-          extrudedHeight: boxHeight,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        },
-        description: buildDescription(
-          greenhouseId,
-          coverType,
-          boxArea,
-          boxHeight,
-          sensors.length,
-          zonePolygons.length,
-          error,
-        ),
-      });
-      entities.set(`greenhouse-shell-${greenhouseId}`, boxEntity);
+        const modelEntity = viewerInstance.entities.add({
+          id: `greenhouse-shell-${greenhouseId}`,
+          position,
+          orientation: orientationQuat,
+          name: `Greenhouse ${greenhouseId}`,
+          model: {
+            uri: modelUrl,
+            scale,
+            minimumPixelSize: 64,
+            maximumScale: 20000,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          },
+          description: buildDescription(
+            greenhouseId,
+            coverType,
+            area || DEFAULT_AREA,
+            height || DEFAULT_HEIGHT,
+            sensors.length,
+            zonePolygons.length,
+            error,
+          ),
+        });
+        entities.set(`greenhouse-shell-${greenhouseId}`, modelEntity);
+      } else {
+        // ── 2b. Procedural box (fallback when no GLB) ──────────────────
+        const boxHeight = height && height > 0 ? height : DEFAULT_HEIGHT;
+        const boxArea = area && area > 0 ? area : DEFAULT_AREA;
+        const boxWidth = Math.sqrt(boxArea / 2);
+        const boxLength = boxWidth * 2;
+        const orientDeg = parseOrientation(orientation);
+        const corners = getRectangleCorners(pos.lon, pos.lat, boxWidth, boxLength, orientDeg);
 
-      // ── 3. Loading label (shown above the box while sensors fetch) ──
+        const boxEntity = viewerInstance.entities.add({
+          id: `greenhouse-shell-${greenhouseId}`,
+          polygon: {
+            hierarchy: Cesium.Cartesian3.fromDegreesArray(corners),
+            material: getCoverColor(Cesium, coverType, shellOpacity),
+            outline: true,
+            outlineColor: getCoverOutlineColor(Cesium, coverType),
+            outlineWidth: 2,
+            extrudedHeight: boxHeight,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          },
+          description: buildDescription(
+            greenhouseId,
+            coverType,
+            boxArea,
+            boxHeight,
+            sensors.length,
+            zonePolygons.length,
+            error,
+          ),
+        });
+        entities.set(`greenhouse-shell-${greenhouseId}`, boxEntity);
+      }
+
+      // ── 3. Loading label (shown above the greenhouse while sensors fetch)
       if (loading) {
+        const labelHeight = modelUrl ? 2 : (height && height > 0 ? height : DEFAULT_HEIGHT) + 2;
         const loadingLabel = viewerInstance.entities.add({
           id: `greenhouse-loading-${greenhouseId}`,
-          position: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, boxHeight + 2),
+          position: Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, labelHeight),
           label: {
             text: 'Loading sensors...',
             font: '14px sans-serif',
@@ -406,6 +456,9 @@ const GreenhouseShell: React.FC<GreenhouseShellProps> = ({
     height,
     coverType,
     orientation,
+    modelUrl,
+    modelRotation,
+    modelScale,
     sensors,
     zonePolygons,
     loading,

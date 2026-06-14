@@ -41,6 +41,9 @@ async def list_greenhouses(
             coverType=e.get("coverType", {}).get("value") if isinstance(e.get("coverType"), dict) else None,
             height=e.get("height", {}).get("value") if isinstance(e.get("height"), dict) else None,
             orientation=e.get("orientation", {}).get("value") if isinstance(e.get("orientation"), dict) else None,
+            ref3DModel=e.get("ref3DModel", {}).get("value") if isinstance(e.get("ref3DModel"), dict) else None,
+            modelScale=e.get("modelScale", {}).get("value") if isinstance(e.get("modelScale"), dict) else None,
+            modelRotation=e.get("modelRotation", {}).get("value") if isinstance(e.get("modelRotation"), dict) else None,
         ))
     return result
 
@@ -68,6 +71,9 @@ async def get_greenhouse(
         height=entity.get("height", {}).get("value") if isinstance(entity.get("height"), dict) else None,
         coverType=entity.get("coverType", {}).get("value") if isinstance(entity.get("coverType"), dict) else None,
         orientation=entity.get("orientation", {}).get("value") if isinstance(entity.get("orientation"), dict) else None,
+        ref3DModel=entity.get("ref3DModel", {}).get("value") if isinstance(entity.get("ref3DModel"), dict) else None,
+        modelScale=entity.get("modelScale", {}).get("value") if isinstance(entity.get("modelScale"), dict) else None,
+        modelRotation=entity.get("modelRotation", {}).get("value") if isinstance(entity.get("modelRotation"), dict) else None,
         refAgriFarm=entity.get("refAgriFarm", {}).get("object") if isinstance(entity.get("refAgriFarm"), dict) else None,
         hasAgriParcel=entity.get("hasAgriParcel", {}).get("object") if isinstance(entity.get("hasAgriParcel"), dict) else None,
     )
@@ -92,6 +98,9 @@ async def create_greenhouse(
         cover_type=body.coverType,
         height=body.height,
         orientation=body.orientation,
+        ref_3d_model=body.ref3DModel,
+        model_scale=body.modelScale,
+        model_rotation=body.modelRotation,
     )
     
     try:

@@ -53,7 +53,9 @@
     "sensors_wet": "sensores mojados",
     "show_more": "Mostrar {count} más",
     "show_less": "Mostrar menos",
-    "no_data": "—"
+    "no_data": "—",
+    "create_from_viewer": "Los invernaderos se crean desde el Visor Unificado. Abre el mapa, usa el asistente de creación de entidades y selecciona «Invernadero».",
+    "open_viewer": "Abrir visor unificado"
   },
   "time_machine": {
     "rewind": "Último",
