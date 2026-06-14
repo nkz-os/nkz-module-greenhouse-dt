@@ -20,7 +20,7 @@ from app.models.ngsi_ld import (
 router = APIRouter()
 
 
-@router.get("", response_model=list[AgriGreenhouseResponse])
+@router.get("/", response_model=list[AgriGreenhouseResponse])
 async def list_greenhouses(
     tenant_id: str = Depends(get_tenant_id),
 ):
@@ -73,7 +73,7 @@ async def get_greenhouse(
     )
 
 
-@router.post("", status_code=201)
+@router.post("/", status_code=201)
 async def create_greenhouse(
     body: AgriGreenhouseCreate,
     tenant_id: str = Depends(get_tenant_id),
