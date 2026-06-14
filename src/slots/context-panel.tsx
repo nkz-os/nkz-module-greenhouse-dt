@@ -7,11 +7,12 @@
  * solar irradiance, zone details, alerts with expand/collapse, and last updated.
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useViewer } from '@nekazari/sdk';
 import {
   AlertTriangle,
+  BatteryCharging,
   Thermometer,
   Droplets,
   Wind,
@@ -23,7 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { greenhouseApi, GreenhouseState, Alert } from '../services/api';
+import { greenhouseApi, GreenhouseState, Alert, ReconstructionResult } from '../services/api';
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -142,6 +143,30 @@ function MetricCard({
   );
 }
 
+// ─── Heatmap variable chips ────────────────────────────────────────────
+
+interface HeatmapVar {
+  key: string;
+  label: string;
+  icon: string;
+}
+
+const HEATMAP_VARS: HeatmapVar[] = [
+  { key: 'temperature', label: 'Temp', icon: '🌡' },
+  { key: 'humidity', label: 'Hum', icon: '💧' },
+  { key: 'leafWetness', label: 'LW', icon: '🍃' },
+  { key: 'co2', label: 'CO₂', icon: '🧪' },
+  { key: 'par', label: 'PAR', icon: '☀️' },
+];
+
+const LEGEND_CONFIG: Record<string, { min: string; max: string; gradient: string }> = {
+  temperature: { min: '0°C', max: '50°C', gradient: 'linear-gradient(to right, #2b6cb0, #e53e3e)' },
+  humidity: { min: '0%', max: '100%', gradient: 'linear-gradient(to right, #f7fafc, #2b6cb0)' },
+  leafWetness: { min: '0', max: '1', gradient: 'linear-gradient(to right, #f7fafc, #38a169)' },
+  co2: { min: '200 ppm', max: '800 ppm', gradient: 'linear-gradient(to right, #38a169, #e53e3e)' },
+  par: { min: '0', max: '2000 μmol/m²/s', gradient: 'linear-gradient(to right, #f7fafc, #dd6b20)' },
+};
+
 // ─── Main Component ────────────────────────────────────────────────────
 
 const GreenhouseContextPanel: React.FC = () => {
@@ -152,6 +177,9 @@ const GreenhouseContextPanel: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
+  const [activeHeatmapVar, setActiveHeatmapVar] = useState<string | null>(null);
+  const [heatmapReconstruct, setHeatmapReconstruct] = useState<ReconstructionResult | null>(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
 
   const greenhouseId: string | null =
     viewer.selectedEntityType === 'AgriGreenhouse' && viewer.selectedEntityId
@@ -181,6 +209,31 @@ const GreenhouseContextPanel: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, [greenhouseId]);
+
+  // ── Heatmap variable click ───────────────────────────────────────────
+
+  const handleHeatmapClick = useCallback(async (variable: string) => {
+    if (!greenhouseId) return;
+    if (activeHeatmapVar === variable) {
+      setActiveHeatmapVar(null);
+      setHeatmapReconstruct(null);
+      return;
+    }
+    setActiveHeatmapVar(variable);
+    setHeatmapLoading(true);
+    try {
+      const result = await greenhouseApi.reconstruct(
+        greenhouseId,
+        new Date().toISOString(),
+        variable,
+      );
+      setHeatmapReconstruct(result);
+    } catch {
+      // Silently fail — the legend is still useful
+    } finally {
+      setHeatmapLoading(false);
+    }
+  }, [greenhouseId, activeHeatmapVar]);
 
   // ── Derived metrics ──────────────────────────────────────────────────
 
@@ -241,6 +294,15 @@ const GreenhouseContextPanel: React.FC = () => {
         ? Math.round(solVals.reduce((a, b) => a + b, 0) / solVals.length)
         : null;
 
+    // ── Battery ────────────────────────────────────────
+    const batteryLevels = allSensors
+      .map((s) => s.batteryLevel)
+      .filter((b): b is number => b !== undefined);
+    const lowBatteryCount = batteryLevels.filter((b) => b < 20).length;
+    const lowBatteryPct = batteryLevels.length > 0
+      ? Math.round((lowBatteryCount / batteryLevels.length) * 100)
+      : null;
+
     // ── VPD ────────────────────────────────────────────
     let vpdValue: number | null = null;
     if (avgTemp !== null && avgHum !== null) {
@@ -259,6 +321,7 @@ const GreenhouseContextPanel: React.FC = () => {
       avgCO2,
       avgPAR,
       avgSol,
+      lowBatteryPct,
       vpdValue,
       lastSeen,
     };
@@ -330,6 +393,51 @@ const GreenhouseContextPanel: React.FC = () => {
         {t('greenhouse.last_seen')}: {lastSeenStr ?? '--'}
       </div>
 
+      {/* ── Variable chips ──────────────────────────────── */}
+      <div className="flex flex-wrap gap-1">
+        {HEATMAP_VARS.map((v) => (
+          <button
+            key={v.key}
+            onClick={() => handleHeatmapClick(v.key)}
+            disabled={heatmapLoading}
+            className={`text-xs px-2 py-1 rounded-full transition-colors ${
+              activeHeatmapVar === v.key
+                ? 'bg-blue-100 text-blue-700 font-medium ring-1 ring-blue-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            } disabled:opacity-50 disabled:cursor-wait`}
+          >
+            {v.icon} {v.label}
+          </button>
+        ))}
+        {heatmapLoading && (
+          <span className="text-xs text-gray-400 self-center ml-1">
+            reconstructing...
+          </span>
+        )}
+      </div>
+
+      {/* ── Heatmap color legend ────────────────────────── */}
+      {activeHeatmapVar && LEGEND_CONFIG[activeHeatmapVar] && (() => {
+        const cfg = LEGEND_CONFIG[activeHeatmapVar];
+        return (
+          <div className="rounded-lg p-2 bg-gray-50 border text-xs">
+            <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+              <span>{cfg.min}</span>
+              <span>{cfg.max}</span>
+            </div>
+            <div
+              className="h-3 rounded"
+              style={{ background: cfg.gradient }}
+            />
+            {heatmapReconstruct && (
+              <div className="mt-1 text-center text-[10px] text-green-600">
+                ✓ {t(`greenhouse.${activeHeatmapVar}`)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Metric grid (2 cols, auto rows) ─────────────── */}
       <div className="grid grid-cols-2 gap-2">
         {/* Temperature */}
@@ -390,6 +498,15 @@ const GreenhouseContextPanel: React.FC = () => {
           value={metrics?.avgSol != null ? `${metrics.avgSol} W/m²` : noData}
           bgColor="bg-orange-50"
           iconColor="text-orange-600"
+        />
+
+        {/* Battery */}
+        <MetricCard
+          icon={BatteryCharging}
+          label={t('greenhouse.battery')}
+          value={metrics?.lowBatteryPct != null ? `${metrics.lowBatteryPct}% low` : noData}
+          bgColor="bg-purple-50"
+          iconColor="text-purple-600"
         />
       </div>
 

@@ -10,6 +10,7 @@
     "co2": "CO₂",
     "par": "PAR",
     "solar_irradiance": "Eguzki-erradiazioa",
+    "battery": "Bateria",
     "alerts": "Alerta",
     "active_alerts": "Alerta Aktiboak",
     "no_active_alerts": "Ez dago alerta aktiborik",
@@ -76,6 +77,7 @@
     "hours_ago": "duela {hours}o",
     "days_ago": "duela {days}e",
     "now": "Orain",
-    "optimal": "Optimoa"
+    "optimal": "Optimoa",
+    "download_cog": "Deskargatu GeoTIFF"
   }
 }

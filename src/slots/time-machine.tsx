@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useViewer } from '@nekazari/sdk';
-import { Play, Pause, Rewind, SkipBack } from 'lucide-react';
+import { Play, Pause, Rewind, SkipBack, Download } from 'lucide-react';
 import {
   useTimelineContext,
   TimelineVariable,
@@ -416,6 +416,17 @@ const TimeMachineInner: React.FC = () => {
               {ctx.sensorCount}
               {t('time_machine.sensors_short')}
             </span>
+
+            {ctx.cogUrl && (
+              <button
+                onClick={() => window.open(ctx.cogUrl!, '_blank')}
+                className="ml-auto p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                title={t('time_machine.download_cog')}
+                aria-label={t('time_machine.download_cog')}
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+            )}
           </>
         ) : isInsufficient ? (
           <>

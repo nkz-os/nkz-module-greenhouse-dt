@@ -10,6 +10,7 @@
     "co2": "CO₂",
     "par": "PAR",
     "solar_irradiance": "Radiación Solar",
+    "battery": "Batería",
     "alerts": "Alertas",
     "active_alerts": "Alertas Activas",
     "no_active_alerts": "Sin alertas activas",
@@ -76,6 +77,7 @@
     "hours_ago": "hace {hours}h",
     "days_ago": "hace {days}d",
     "now": "Ahora",
-    "optimal": "Óptimo"
+    "optimal": "Óptimo",
+    "download_cog": "Descargar GeoTIFF"
   }
 }
