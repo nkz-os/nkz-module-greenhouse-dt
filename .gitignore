@@ -32,3 +32,10 @@ yarn-error.log*
 *.tsbuildinfo
 
 .venv/
+
+# Security: sensitive files
+*.pem
+*.key
+apikey_*.txt
+*.apikey
+*-secret*
