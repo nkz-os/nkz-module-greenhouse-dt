@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@nekazari/geo-utils':
-        specifier: file:../nkz/packages/geo-utils
-        version: file:../nkz/packages/geo-utils(@nekazari/sdk@1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))
+        specifier: ^0.1.0
+        version: 0.1.0(@nekazari/sdk@1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))
       '@nekazari/sdk':
         specifier: ^1.1.4
         version: 1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
@@ -423,8 +423,8 @@ packages:
       react: ^18.3.1
       react-dom: ^18.3.1
 
-  '@nekazari/geo-utils@file:../nkz/packages/geo-utils':
-    resolution: {directory: ../nkz/packages/geo-utils, type: directory}
+  '@nekazari/geo-utils@0.1.0':
+    resolution: {integrity: sha512-wWF6Aqe9mEspjUSNcIqBr6cpDE+sG3L04uqxO9wrev0vfq472NkzJ4yuZMDV26FMnXKj7kUq4Z5wffTD7BW+2g==}
     peerDependencies:
       '@nekazari/sdk': ^1.0.0
 
@@ -2951,7 +2951,7 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@nekazari/geo-utils@file:../nkz/packages/geo-utils(@nekazari/sdk@1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))':
+  '@nekazari/geo-utils@0.1.0(@nekazari/sdk@1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))':
     dependencies:
       '@nekazari/sdk': 1.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       geolibre-wasm: 0.4.4

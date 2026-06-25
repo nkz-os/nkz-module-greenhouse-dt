@@ -14,7 +14,7 @@
     "build:module": "vite build && node tools/generate-manifest.mjs"
   },
   "dependencies": {
-    "@nekazari/geo-utils": "file:../nkz/packages/geo-utils",
+    "@nekazari/geo-utils": "^0.1.0",
     "@nekazari/sdk": "^1.1.4",
     "@nekazari/ui-kit": "^1.0.0",
     "@nekazari/viewer-kit": "^0.1.1-alpha.0",
