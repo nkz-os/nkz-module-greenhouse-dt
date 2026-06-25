@@ -28,6 +28,13 @@ spec:
                 optional: true
           env:
             # ── Secrets ──────────────────────────────────────────
+            - name: REQUIRE_HMAC_SIGNATURE
+              value: "true"
+            - name: HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: secret
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
