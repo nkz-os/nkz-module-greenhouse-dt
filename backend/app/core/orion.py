@@ -110,22 +110,17 @@ def build_zone_entity(
     location: Optional[dict] = None,
     area: Optional[float] = None,
 ) -> dict:
-    """Build an AgriParcel zone entity linked to a greenhouse.
+    """Build an AgriParcelZone entity linked to a greenhouse.
 
     NOTE: @context is mandatory in the body because SyncOrionClient.create_entity()
     sends Content-Type: application/ld+json but does NOT inject @context.
-    SDM-standard hasAgriGreenhouse relationship, with refAgriGreenhouse
-    as legacy fallback for backward compatibility during migration.
+    Uses the SDM-standard hasAgriGreenhouse relationship.
     """
     entity = {
         "@context": settings.context_url,
-        "id": f"urn:ngsi-ld:AgriParcel:{zone_id}",
-        "type": "AgriParcel",
+        "id": f"urn:ngsi-ld:AgriParcelZone:{zone_id}",
+        "type": "AgriParcelZone",
         "name": {"type": "Property", "value": name},
-        "refAgriGreenhouse": {  # Legacy — kept for backward compat during migration
-            "type": "Relationship",
-            "object": f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}",
-        },
         "hasAgriGreenhouse": {  # SDM standard (FIWARE Relationship Naming)
             "type": "Relationship",
             "object": f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}",

@@ -155,8 +155,8 @@ async def get_greenhouse_state(
         zone_uris = objects if isinstance(objects, list) else [objects]
     
     if not zone_uris:
-        # Legacy fallback: query AgriParcel with refAgriGreenhouse
-        for e in client.query_entities(type="AgriParcel", q=f"refAgriGreenhouse==\"{urn}\""):
+        # Fallback: query AgriParcelZone linked to this greenhouse
+        for e in client.query_entities(type="AgriParcelZone", q=f"hasAgriGreenhouse==\"{urn}\""):
             zone_uris.append(e["id"])
     
     # Get sensors for each zone
