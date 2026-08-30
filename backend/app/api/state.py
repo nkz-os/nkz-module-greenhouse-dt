@@ -199,23 +199,21 @@ def _get_zone_uris(greenhouse: dict) -> list[str]:
 
 
 def _get_sensors_for_zones(client, zone_uris: list[str]) -> list[dict]:
-    """Get all AgriSensor entities for given zones.
+    """Get all Device entities for given zones.
 
-    Queries using BOTH new (hasAgriParcel) and legacy (refAgriParcel)
-    relationship names per AGENTS.md FIWARE Relationship Naming rule.
+    `controlledAsset` is the canonical parcel/zone link on a Device;
+    `hasAgriParcel`/`refAgriParcel` remain as fallbacks for devices provisioned
+    before the cutover.
     """
     sensors = []
     for zone_uri in zone_uris:
-        # Try new relationship name first
-        zone_sensors = client.query_entities(
-            type="AgriSensor",
-            q=f"hasAgriParcel==\"{zone_uri}\"",
-        )
-        if not zone_sensors:
-            # Fallback to legacy refAgriParcel
+        zone_sensors = []
+        for rel in ("controlledAsset", "hasAgriParcel", "refAgriParcel"):
             zone_sensors = client.query_entities(
-                type="AgriSensor",
-                q=f"refAgriParcel==\"{zone_uri}\"",
+                type="Device",
+                q=f"{rel}==\"{zone_uri}\"",
             )
+            if zone_sensors:
+                break
         sensors.extend(zone_sensors)
     return sensors

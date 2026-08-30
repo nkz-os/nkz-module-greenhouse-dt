@@ -73,15 +73,20 @@ class AgriGreenhouseResponse(BaseModel):
     modelRotation: Optional[list[float]] = None
 
 
-# ── AgriSensor (for internal sensors) ─────────────────────────────────────────
-# AgriSensor is a first-class entity type in the platform (see ngsi-ld.ts:131).
-# It links to the physical Device via hasDevice.
+# ── Device (for internal sensors) ─────────────────────────────────────────────
+# `Device` is the canonical Smart Data Model type for a sensor; it replaced the
+# platform-specific AgriSensor. A Device carries no readings — those are separate
+# `DeviceMeasurement` entities, reached through `refDevice`. Its parcel/zone link
+# is `controlledAsset`.
+#
+# The field names below are the module's JSON contract with its frontend, not
+# NGSI-LD attribute names: they stay as they are.
 
-class AgriSensorState(BaseModel):
+class DeviceState(BaseModel):
     """Current state of a sensor inside the greenhouse."""
     id: str
     name: Optional[str] = None
-    zone: Optional[str] = None  # refAgriParcel or hasAgriParcel
+    zone: Optional[str] = None  # from Device.controlledAsset
     temperature: Optional[float] = None
     relativeHumidity: Optional[float] = None
     leafWetness: Optional[int] = None  # 0 or 1

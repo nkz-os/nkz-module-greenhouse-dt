@@ -148,6 +148,18 @@ def _build_alert_entity(
     }
 
 
+def _measurement_urn(device_id: str, tenant_id: str, prop: str) -> str:
+    """Build the timeseries key for one (device, property) series.
+
+    telemetry-worker stores `entity_id` = the notified entity's own id, and a
+    canonical reading is one entity per device and property:
+    `urn:ngsi-ld:DeviceMeasurement:{tenant}:{device}:{property}`. Accepts either a
+    full Device URN or a bare device id.
+    """
+    device = device_id.split(":")[-1] if ":" in device_id else device_id
+    return f"urn:ngsi-ld:DeviceMeasurement:{tenant_id}:{device}:{prop}"
+
+
 # ── Celery Task ───────────────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
@@ -173,9 +185,14 @@ def evaluate_leaf_wetness(
     async def _fetch():
         ts = TimescaleClient(tenant_id=tenant_id, base_url=settings.timeseries_reader_url)
         try:
-            sensor_urn = f"urn:ngsi-ld:AgriSensor:{sensor_id.split(':')[-1]}"
-            w = await ts.query(sensor_urn, "leafWetness", since, now)
-            t = await ts.query(sensor_urn, "temperature", since, now)
+            w = await ts.query(
+                _measurement_urn(sensor_id, tenant_id, "leafWetness"),
+                "leafWetness", since, now,
+            )
+            t = await ts.query(
+                _measurement_urn(sensor_id, tenant_id, "temperature"),
+                "temperature", since, now,
+            )
             return w, t
         finally:
             await ts.close()

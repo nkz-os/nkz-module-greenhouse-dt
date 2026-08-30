@@ -108,7 +108,7 @@ class TestBuildAlertEntity:
     def test_basic_structure(self):
         now = datetime(2026, 6, 12, 10, 0, 0, tzinfo=timezone.utc)
         entity = _build_alert_entity(
-            sensor_id="urn:ngsi-ld:AgriSensor:gh42-temp-01",
+            sensor_id="urn:ngsi-ld:Device:tenant-abc:gh42-temp-01",
             greenhouse_id="gh42",
             sub_category="botrytis_cinerea",
             severity="high",
@@ -124,63 +124,29 @@ class TestBuildAlertEntity:
         assert "botrytis" in entity["id"]
 
 
-class TestExtractGreenhouseId:
-    """Tests for _extract_greenhouse_id — handles any zone naming pattern."""
+class TestGreenhouseFromZone:
+    """Zone naming survives the vocabulary change; only its input moved.
+
+    The zone URN used to be read off the sensor entity. It now comes from the
+    device's `controlledAsset`, resolved in `_resolve_greenhouse` — but the
+    naming rule that turns a zone parcel into a greenhouse id is unchanged.
+    """
 
     def test_standard_zone_naming(self):
-        from app.api.notify import _extract_greenhouse_id
-        entity = {
-            "hasAgriParcel": {
-                "type": "Relationship",
-                "object": "urn:ngsi-ld:AgriParcel:gh42-zone-NO",
-            }
-        }
-        assert _extract_greenhouse_id(entity) == "gh42"
+        from app.api.notify import _greenhouse_from_zone
+
+        assert _greenhouse_from_zone("urn:ngsi-ld:AgriParcel:gh42-zone-NO") == "gh42"
 
     def test_direct_parcel_reference(self):
-        from app.api.notify import _extract_greenhouse_id
-        entity = {
-            "hasAgriParcel": {
-                "type": "Relationship",
-                "object": "urn:ngsi-ld:AgriParcel:parcel-001",
-            }
-        }
-        assert _extract_greenhouse_id(entity) is None
+        from app.api.notify import _greenhouse_from_zone
 
-    def test_no_relationship(self):
-        from app.api.notify import _extract_greenhouse_id
-        assert _extract_greenhouse_id({}) is None
+        assert _greenhouse_from_zone("urn:ngsi-ld:AgriParcel:parcel-001") is None
 
     def test_multiple_zone_dashes(self):
         """Greenhouse ID with hyphens, and zone suffix with capital Z."""
-        from app.api.notify import _extract_greenhouse_id
-        entity = {
-            "hasAgriParcel": {
-                "type": "Relationship",
-                "object": "urn:ngsi-ld:AgriParcel:my-gh-Zone-A",
-            }
-        }
-        assert _extract_greenhouse_id(entity) == "my-gh"
+        from app.api.notify import _greenhouse_from_zone
 
-    def test_legacy_refAgriParcel(self):
-        from app.api.notify import _extract_greenhouse_id
-        entity = {
-            "refAgriParcel": {
-                "type": "Relationship",
-                "object": "urn:ngsi-ld:AgriParcel:gh42-zone-NO",
-            }
-        }
-        assert _extract_greenhouse_id(entity) == "gh42"
-
-    def test_no_parcel_id(self):
-        from app.api.notify import _extract_greenhouse_id
-        entity = {"hasAgriParcel": {"type": "Relationship", "object": ""}}
-        assert _extract_greenhouse_id(entity) is None
-
-    def test_wrong_rel_type(self):
-        from app.api.notify import _extract_greenhouse_id
-        entity = {"hasAgriParcel": "not_a_dict"}
-        assert _extract_greenhouse_id(entity) is None
+        assert _greenhouse_from_zone("urn:ngsi-ld:AgriParcel:my-gh-Zone-A") == "my-gh"
 
 
 class TestEvaluateTask:
@@ -217,7 +183,7 @@ class TestEvaluateTask:
         mock_orion.create_entity.return_value = {"id": "test"}
 
         result = evaluate_leaf_wetness(
-            sensor_id="urn:ngsi-ld:AgriSensor:gh42-temp-01",
+            sensor_id="urn:ngsi-ld:Device:tenant-abc:gh42-temp-01",
             greenhouse_id="gh42",
             tenant_id="tenant-abc",
         )
@@ -225,3 +191,29 @@ class TestEvaluateTask:
         assert result["status"] == "ok"
         assert result["alerts_created"] >= 1
         assert result["wetness_hours"] >= 7.9  # ~8h
+
+
+class TestTimeseriesEntityIds:
+    """The timeseries store keys readings by the DeviceMeasurement URN.
+
+    telemetry-worker persists `entity_id` = the notified entity's id, which for a
+    canonical reading is `urn:ngsi-ld:DeviceMeasurement:{tenant}:{device}:{property}`
+    — one series per (device, property). Rebuilding an `AgriSensor` URN, as this
+    worker used to, queries a series that no longer exists and always reads empty.
+    """
+
+    def test_measurement_urn_is_per_device_and_property(self):
+        from app.workers.pathological import _measurement_urn
+
+        assert (
+            _measurement_urn("urn:ngsi-ld:Device:acme:gh42-temp-01", "acme", "leafWetness")
+            == "urn:ngsi-ld:DeviceMeasurement:acme:gh42-temp-01:leafWetness"
+        )
+
+    def test_accepts_a_bare_device_id(self):
+        from app.workers.pathological import _measurement_urn
+
+        assert (
+            _measurement_urn("gh42-temp-01", "acme", "temperature")
+            == "urn:ngsi-ld:DeviceMeasurement:acme:gh42-temp-01:temperature"
+        )

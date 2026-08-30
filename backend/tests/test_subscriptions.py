@@ -13,10 +13,12 @@ class TestSubscriptionBody:
 
         assert body["type"] == "Subscription"
         assert body["description"] == SUBSCRIPTION_DESCRIPTION
-        assert body["entities"] == [{"type": "AgriSensor"}]
-        assert "leafWetness" in body["watchedAttributes"]
-        assert "temperature" in body["watchedAttributes"]
-        assert "relativeHumidity" in body["watchedAttributes"]
+        assert body["entities"] == [{"type": "DeviceMeasurement"}]
+        # A DeviceMeasurement names its property in `controlledProperty` and
+        # carries the reading in `numValue`; "leafWetness" is a VALUE there, not
+        # an attribute key, so watching it by name would never fire. Filtering
+        # by property belongs in the notify handler.
+        assert body["watchedAttributes"] == ["numValue"]
         assert body["notification"]["endpoint"]["uri"] == callback_url
         assert body["notification"]["endpoint"]["accept"] == "application/json"
         assert body["notification"]["format"] == "normalized"
@@ -50,7 +52,7 @@ class TestEnsureSubscription:
         """ensure_pathological_subscription returns None if subscription exists."""
         mock_client = AsyncMock()
         mock_client.query_subscriptions.return_value = [
-            {"description": "nkz-module: AgriSensor -> greenhouse-dt (pathological)"}
+            {"description": SUBSCRIPTION_DESCRIPTION}
         ]
         mock_orion_cls.return_value = mock_client
 

@@ -3,8 +3,10 @@
 NGSI-LD subscription management for greenhouse-dt.
 
 Creates and ensures per-tenant subscriptions for pathological monitoring.
-One subscription per tenant (watches all AgriSensor entities) — filtering
-happens in the notify handler.
+One subscription per tenant (watches all DeviceMeasurement entities) —
+filtering by measured property happens in the notify handler, because a
+DeviceMeasurement names its property in `controlledProperty` (a VALUE) rather
+than as an attribute key, so watchedAttributes cannot select on it.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-SUBSCRIPTION_DESCRIPTION = "nkz-module: AgriSensor -> greenhouse-dt (pathological)"
+SUBSCRIPTION_DESCRIPTION = "nkz-module: DeviceMeasurement -> greenhouse-dt (pathological)"
 NOTIFY_PATH = "/api/ngsi-ld/notify"
 
 
@@ -25,8 +27,8 @@ def _subscription_body(callback_url: str) -> dict:
     return {
         "type": "Subscription",
         "description": SUBSCRIPTION_DESCRIPTION,
-        "entities": [{"type": "AgriSensor"}],
-        "watchedAttributes": ["leafWetness", "temperature", "relativeHumidity"],
+        "entities": [{"type": "DeviceMeasurement"}],
+        "watchedAttributes": ["numValue"],
         "notification": {
             "endpoint": {"uri": callback_url, "accept": "application/json"},
             "format": "normalized",

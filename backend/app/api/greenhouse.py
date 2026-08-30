@@ -13,7 +13,7 @@ from app.middleware.auth import get_tenant_id, get_user_id, get_user_roles
 from app.models.ngsi_ld import (
     AgriGreenhouseCreate,
     AgriGreenhouseResponse,
-    AgriSensorState,
+    DeviceState,
     AlertResponse,
 )
 
@@ -135,8 +135,9 @@ async def get_greenhouse_state(
 ):
     """Return aggregated current state of a greenhouse: sensor readings by zone.
     
-    Queries Orion-LD for AgriSensor entities linked to the greenhouse's zones.
-    Returns temperature, humidity, VPD, leaf wetness per zone.
+    Queries Orion-LD for the Device entities linked to the greenhouse's zones,
+    then their DeviceMeasurement readings. Returns temperature, humidity, VPD and
+    leaf wetness per zone.
     """
     client = get_orion_client(tenant_id)
     urn = f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}"
@@ -163,28 +164,33 @@ async def get_greenhouse_state(
     zones_state = []
     for zone_uri in zone_uris:
         # Try new relationship name first
-        sensors = client.query_entities(
-            type="AgriSensor",
-            q=f"hasAgriParcel==\"{zone_uri}\"",
-        )
-        if not sensors:
-            # Fallback to legacy refAgriParcel
+        # controlledAsset is canonical; ref*/has* are the migration window
+        sensors = []
+        for rel in ("controlledAsset", "hasAgriParcel", "refAgriParcel"):
             sensors = client.query_entities(
-                type="AgriSensor",
-                q=f"refAgriParcel==\"{zone_uri}\"",
+                type="Device",
+                q=f"{rel}==\"{zone_uri}\"",
             )
-        
+            if sensors:
+                break
+
+        # Readings are separate entities pointing back at the device. One query
+        # per zone, OR-joined over its devices — same order as the sensor query.
+        readings = _readings_by_device(client, [s.get("id", "") for s in sensors])
+
         zone_sensors = []
         for s in sensors:
-            zone_sensors.append(AgriSensorState(
-                id=s.get("id", ""),
+            device_id = s.get("id", "")
+            values = readings.get(device_id, {})
+            zone_sensors.append(DeviceState(
+                id=device_id,
                 name=s.get("name", {}).get("value") if isinstance(s.get("name"), dict) else s.get("name"),
                 zone=zone_uri,
-                temperature=s.get("temperature", {}).get("value") if isinstance(s.get("temperature"), dict) else None,
-                relativeHumidity=s.get("relativeHumidity", {}).get("value") if isinstance(s.get("relativeHumidity"), dict) else None,
-                leafWetness=s.get("leafWetness", {}).get("value") if isinstance(s.get("leafWetness"), dict) else None,
-                solarIrradiance=s.get("solarIrradiance", {}).get("value") if isinstance(s.get("solarIrradiance"), dict) else None,
-                co2=s.get("co2", {}).get("value") if isinstance(s.get("co2"), dict) else None,
+                temperature=values.get("temperature"),
+                relativeHumidity=values.get("relativeHumidity"),
+                leafWetness=values.get("leafWetness"),
+                solarIrradiance=values.get("solarIrradiance"),
+                co2=values.get("co2"),
                 location=s.get("location", {}).get("value") if isinstance(s.get("location"), dict) else None,
             ))
         
@@ -245,3 +251,55 @@ async def get_greenhouse_alerts(
         ))
     
     return result
+
+
+def _readings_by_device(client, device_ids: list[str]) -> dict[str, dict]:
+    """Latest reading per (device, property), from the devices' DeviceMeasurements.
+
+    A `DeviceMeasurement` names its property in `controlledProperty` (a VALUE, not
+    an attribute key) and holds the reading in `numValue`/`textValue`. Its device
+    is `refDevice` — never the last segment of its own id, which is the property
+    name. Later `dateObserved` wins when a device reports the same property twice.
+    """
+    ids = [d for d in device_ids if d]
+    if not ids:
+        return {}
+
+    measurements = client.query_entities(
+        type="DeviceMeasurement",
+        q="|".join(f'refDevice=="{device_id}"' for device_id in ids),
+    )
+
+    latest: dict[str, dict] = {}
+    seen_at: dict[tuple[str, str], str] = {}
+    for m in measurements or []:
+        ref = m.get("refDevice")
+        device_id = ref.get("object") if isinstance(ref, dict) else ref
+        if not isinstance(device_id, str) or not device_id:
+            continue
+
+        prop = m.get("controlledProperty")
+        name = prop.get("value") if isinstance(prop, dict) else prop
+        if not isinstance(name, str) or not name:
+            continue
+
+        value = None
+        for value_key in ("numValue", "textValue"):
+            attr = m.get(value_key)
+            candidate = attr.get("value") if isinstance(attr, dict) else attr
+            if candidate is not None:
+                value = candidate
+                break
+        if value is None:
+            continue
+
+        observed = m.get("dateObserved")
+        observed_at = observed.get("value") if isinstance(observed, dict) else observed
+        observed_at = str(observed_at or "")
+        key = (device_id, name)
+        if key in seen_at and observed_at <= seen_at[key]:
+            continue
+        seen_at[key] = observed_at
+        latest.setdefault(device_id, {})[name] = value
+
+    return latest
