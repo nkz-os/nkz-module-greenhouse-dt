@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.config import settings
 from app.core.orion import get_orion_client, build_greenhouse_entity
+from app.core.measurements import _zone_link_q
 from app.middleware.auth import get_tenant_id, get_user_id, get_user_roles
 from app.models.ngsi_ld import (
     AgriGreenhouseCreate,
@@ -164,15 +165,7 @@ async def get_greenhouse_state(
     zones_state = []
     for zone_uri in zone_uris:
         # Try new relationship name first
-        # controlledAsset is canonical; ref*/has* are the migration window
-        sensors = []
-        for rel in ("controlledAsset", "hasAgriParcel", "refAgriParcel"):
-            sensors = client.query_entities(
-                type="Device",
-                q=f"{rel}==\"{zone_uri}\"",
-            )
-            if sensors:
-                break
+        sensors = client.query_entities(type="Device", q=_zone_link_q(zone_uri))
 
         # Readings are separate entities pointing back at the device. One query
         # per zone, OR-joined over its devices — same order as the sensor query.

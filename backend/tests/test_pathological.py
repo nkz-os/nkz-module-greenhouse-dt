@@ -203,7 +203,7 @@ class TestTimeseriesEntityIds:
     """
 
     def test_measurement_urn_is_per_device_and_property(self):
-        from app.workers.pathological import _measurement_urn
+        from app.core.measurements import _measurement_urn
 
         assert (
             _measurement_urn("urn:ngsi-ld:Device:acme:gh42-temp-01", "acme", "leafWetness")
@@ -211,9 +211,30 @@ class TestTimeseriesEntityIds:
         )
 
     def test_accepts_a_bare_device_id(self):
-        from app.workers.pathological import _measurement_urn
+        from app.core.measurements import _measurement_urn
 
         assert (
             _measurement_urn("gh42-temp-01", "acme", "temperature")
             == "urn:ngsi-ld:DeviceMeasurement:acme:gh42-temp-01:temperature"
         )
+
+    def test_external_id_containing_colons_is_not_truncated(self):
+        """entity-manager does not forbid a colon in the external id, and builds
+        the measurement id by keeping it whole. Slicing the URN into segments
+        would silently address a different series."""
+        from app.core.measurements import _measurement_urn
+
+        device_urn = "urn:ngsi-ld:Device:acme:probe:01"
+        assert (
+            _measurement_urn(device_urn, "acme", "leafWetness")
+            == "urn:ngsi-ld:DeviceMeasurement:acme:probe:01:leafWetness"
+        )
+
+    def test_derives_from_the_device_urn_not_the_passed_tenant(self):
+        """The URN is the source of truth; a mismatched tenant argument must not
+        silently redirect the query to another tenant's series."""
+        from app.core.measurements import _measurement_urn
+
+        assert _measurement_urn(
+            "urn:ngsi-ld:Device:acme:probe-1", "other-tenant", "temperature"
+        ) == "urn:ngsi-ld:DeviceMeasurement:acme:probe-1:temperature"

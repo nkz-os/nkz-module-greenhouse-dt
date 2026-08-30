@@ -17,7 +17,7 @@ INSERT INTO marketplace_modules (
     'version', '0.1.0',
     'icon', 'sprout',
     'setup_parcel_url', 'http://greenhouse-dt-backend:8420/api/internal/setup-parcel',
-    'entity_types', jsonb_build_array('AgriGreenhouse', 'AgriSensor', 'Alert'),
+    'entity_types', jsonb_build_array('AgriGreenhouse', 'Device', 'DeviceMeasurement', 'Alert'),
     'capabilities', jsonb_build_array(
       '3d_visualization',
       'phytopathology_alerts',

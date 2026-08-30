@@ -16,6 +16,7 @@ from app.config import settings
 from app.core.orion import get_orion_client
 from app.middleware.auth import get_tenant_id
 from app.services.interpolation import interpolate_to_grid
+from app.core.measurements import _measurement_urn, _zone_link_q
 from app.services.heatmap_generator import (
     grid_to_png_bytes,
     grid_to_cog_bytes,
@@ -106,19 +107,22 @@ async def reconstruct_state(
 
     points = []
     for s in sensors:
-        sensor_id = s["id"].rsplit(":", 1)[-1]
+        # The timeseries store keys a reading by the DeviceMeasurement URN that
+        # produced it — one series per (device, property) — never by a bare
+        # device id. Same helper the pathological worker uses.
+        series_id = _measurement_urn(s["id"], tenant_id, variable)
         loc = s.get("location", {}).get("value", {})
         coords = loc.get("coordinates", [None, None])
         try:
             readings = await ts_client.query(
-                entity_id=sensor_id,
+                entity_id=series_id,
                 attribute=variable,
                 since=timestamp,
                 until=timestamp,
                 limit=1,
             )
         except Exception as exc:
-            logger.warning("Failed to query TS for %s: %s", sensor_id, exc)
+            logger.warning("Failed to query TS for %s: %s", series_id, exc)
             readings = []
 
         if readings and coords[0] is not None:
@@ -207,13 +211,5 @@ def _get_sensors_for_zones(client, zone_uris: list[str]) -> list[dict]:
     """
     sensors = []
     for zone_uri in zone_uris:
-        zone_sensors = []
-        for rel in ("controlledAsset", "hasAgriParcel", "refAgriParcel"):
-            zone_sensors = client.query_entities(
-                type="Device",
-                q=f"{rel}==\"{zone_uri}\"",
-            )
-            if zone_sensors:
-                break
-        sensors.extend(zone_sensors)
+        sensors.extend(client.query_entities(type="Device", q=_zone_link_q(zone_uri)))
     return sensors

@@ -61,3 +61,58 @@ class TestEnsureSubscription:
         result = await ensure_pathological_subscription("test-tenant")
         assert result is None
         mock_client.create_subscription.assert_not_called()
+
+
+class TestSubscriptionScope:
+    def test_filters_by_measured_property(self):
+        """Without a q filter this matches every reading of every device in the
+        tenant, and throttling is a per-subscription minimum interval — an
+        unrelated probe would consume the window a leafWetness reading needed."""
+        from app.core.subscriptions import TRACKED_PROPERTIES, _subscription_body
+
+        q = _subscription_body("http://greenhouse.example.invalid/notify")["q"]
+        for prop in TRACKED_PROPERTIES:
+            assert f'controlledProperty=="{prop}"' in q
+        assert q.count("|") == len(TRACKED_PROPERTIES) - 1
+
+
+class TestLegacySubscriptionCleanup:
+    @patch("app.core.subscriptions.OrionClient")
+    @pytest.mark.asyncio
+    async def test_removes_the_retired_agrisensor_subscription(self, mock_orion_cls):
+        """The description changed with the vocabulary, so match-by-description
+        would never find the old one again: it must be deleted, not orphaned."""
+        from app.core.subscriptions import (
+            LEGACY_SUBSCRIPTION_DESCRIPTION,
+            ensure_pathological_subscription,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.query_subscriptions.return_value = [
+            {"id": "urn:ngsi-ld:Subscription:old", "description": LEGACY_SUBSCRIPTION_DESCRIPTION}
+        ]
+        mock_client.create_subscription.return_value = "/ngsi-ld/v1/subscriptions/new-1"
+        mock_orion_cls.return_value = mock_client
+
+        result = await ensure_pathological_subscription("test-tenant")
+
+        mock_client.delete_subscription.assert_awaited_once_with("urn:ngsi-ld:Subscription:old")
+        assert result == "new-1"
+
+    @patch("app.core.subscriptions.OrionClient")
+    @pytest.mark.asyncio
+    async def test_cleanup_failure_does_not_block_ensure(self, mock_orion_cls):
+        from app.core.subscriptions import (
+            LEGACY_SUBSCRIPTION_DESCRIPTION,
+            ensure_pathological_subscription,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.query_subscriptions.return_value = [
+            {"id": "urn:ngsi-ld:Subscription:old", "description": LEGACY_SUBSCRIPTION_DESCRIPTION}
+        ]
+        mock_client.delete_subscription.side_effect = RuntimeError("broker down")
+        mock_client.create_subscription.return_value = "/ngsi-ld/v1/subscriptions/new-1"
+        mock_orion_cls.return_value = mock_client
+
+        assert await ensure_pathological_subscription("test-tenant") == "new-1"

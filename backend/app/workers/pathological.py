@@ -24,6 +24,7 @@ from nkz_platform_sdk.timescale import TimescaleClient
 
 from app.celery_app import celery_app
 from app.config import settings
+from app.core.measurements import _measurement_urn
 
 logger = logging.getLogger(__name__)
 
@@ -146,18 +147,6 @@ def _build_alert_entity(
             "value": (now + timedelta(hours=24)).isoformat().replace("+00:00", "Z"),
         },
     }
-
-
-def _measurement_urn(device_id: str, tenant_id: str, prop: str) -> str:
-    """Build the timeseries key for one (device, property) series.
-
-    telemetry-worker stores `entity_id` = the notified entity's own id, and a
-    canonical reading is one entity per device and property:
-    `urn:ngsi-ld:DeviceMeasurement:{tenant}:{device}:{property}`. Accepts either a
-    full Device URN or a bare device id.
-    """
-    device = device_id.split(":")[-1] if ":" in device_id else device_id
-    return f"urn:ngsi-ld:DeviceMeasurement:{tenant_id}:{device}:{prop}"
 
 
 # ── Celery Task ───────────────────────────────────────────────────────────────

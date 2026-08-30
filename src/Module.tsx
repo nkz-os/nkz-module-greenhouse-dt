@@ -14,7 +14,7 @@ export default defineModule({
   accent: { base: '#059669', soft: '#D1FAE5', strong: '#047857' },
   icon: 'sprout',
   data: {
-    entities: ['AgriGreenhouse', 'AgriSensor', 'Alert', 'AgriParcel'],
+    entities: ['AgriGreenhouse', 'Device', 'DeviceMeasurement', 'Alert', 'AgriParcel'],
     timeseries: ['temperature', 'relativeHumidity', 'humidity', 'leafWetness', 'solarIrradiance', 'co2', 'par'],
   },
   main: MainPage,
