@@ -3,7 +3,7 @@
 NGSI-LD subscription notification handler.
 
 Receives callbacks from Orion-LD when a DeviceMeasurement reading changes.
-Validates payload, responds 200 immediately, and enqueues a Celery task for
+Validates payload, responds 204 immediately, and enqueues a Celery task for
 pathological evaluation.
 
 A DeviceMeasurement inverts the shape the retired AgriSensor used: the measured
@@ -104,12 +104,18 @@ async def _resolve_greenhouse(device_urn: str, tenant_id: str) -> str | None:
     return None
 
 
-@router.post("/api/ngsi-ld/notify")
+@router.post("/api/ngsi-ld/notify", status_code=204)
 async def ngsi_ld_notify(request: Request):
     """Receive NGSI-LD subscription notifications from Orion-LD.
 
     Validates payload, extracts sensor entities, and enqueues Celery tasks
     for pathological evaluation. Returns immediately.
+
+    Answers 204 with no body: Orion-LD looks for a capitalised ``Content-Length:``
+    with a case-sensitive ``strstr`` and only waives it on 204, while uvicorn always
+    emits the header lower-cased. A 200 + body is therefore counted as a failed
+    notification, and three consecutive failures deactivate the subscription.
+    Malformed payloads still answer 400 so the failure stays visible.
     """
     payload = await request.json()
     if not isinstance(payload, dict):
@@ -147,4 +153,4 @@ async def ngsi_ld_notify(request: Request):
         queued += 1
         logger.debug("Enqueued evaluation for device %s", device_urn)
 
-    return {"status": "accepted", "queued": queued}
+    logger.info("Notification processed: %d evaluation(s) queued", queued)

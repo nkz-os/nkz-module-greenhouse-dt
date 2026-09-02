@@ -54,8 +54,7 @@ def _post(entity, device=None):
 
 def test_enqueues_with_device_and_greenhouse_resolved_through_the_device():
     resp, task = _post(_measurement())
-    assert resp.status_code == 200
-    assert resp.json()["queued"] == 1
+    assert resp.status_code == 204
     task.delay.assert_called_once_with(
         sensor_id=DEVICE_URN, greenhouse_id="gh42", tenant_id="acme"
     )
@@ -66,7 +65,7 @@ def test_untracked_property_is_ignored():
     resp, task = _post(
         _measurement(controlledProperty={"type": "Property", "value": "batteryLevel"})
     )
-    assert resp.json()["queued"] == 0
+    assert resp.status_code == 204
     task.delay.assert_not_called()
 
 
@@ -80,14 +79,14 @@ def test_incomplete_measurement_enqueues_nothing(broken):
     for key in broken:
         entity.pop(key, None)
     resp, task = _post(entity)
-    assert resp.json()["queued"] == 0
+    assert resp.status_code == 204
     task.delay.assert_not_called()
 
 
 def test_device_without_a_zone_enqueues_nothing():
     """No zone means no greenhouse. Never a guess."""
     resp, task = _post(_measurement(), device={"id": DEVICE_URN, "type": "Device"})
-    assert resp.json()["queued"] == 0
+    assert resp.status_code == 204
     task.delay.assert_not_called()
 
 
@@ -101,4 +100,5 @@ def test_legacy_relationship_names_still_resolve():
             "hasAgriParcel": {"type": "Relationship", "object": ZONE_URN},
         },
     )
-    assert resp.json()["queued"] == 1
+    assert resp.status_code == 204
+    task.delay.assert_called_once()
