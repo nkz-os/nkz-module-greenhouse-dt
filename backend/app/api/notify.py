@@ -15,9 +15,11 @@ one hop further, on the device's `controlledAsset`.
 
 from __future__ import annotations
 
+import hmac
 import logging
+import os
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from nkz_platform_sdk import OrionClient
 
@@ -27,6 +29,19 @@ from app.workers.pathological import evaluate_leaf_wetness
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ngsi-ld"])
+
+
+def _reject_unauthenticated_notify(x_internal_secret: str | None) -> HTTPException | None:
+    """Flag-gated auth for the Orion notification receiver (two-phase rollout)."""
+    require = os.getenv("NOTIFY_REQUIRE_INTERNAL_SECRET", "").lower() in (
+        "1", "true", "yes", "on"
+    )
+    if not require:
+        return None
+    secret = os.getenv("INTERNAL_SERVICE_SECRET", "")
+    if not secret or not hmac.compare_digest(x_internal_secret or "", secret):
+        return HTTPException(status_code=401, detail="missing or invalid internal secret")
+    return None
 
 
 # Properties this module evaluates. Anything else is a real reading we ignore.
@@ -105,7 +120,10 @@ async def _resolve_greenhouse(device_urn: str, tenant_id: str) -> str | None:
 
 
 @router.post("/api/ngsi-ld/notify", status_code=204)
-async def ngsi_ld_notify(request: Request):
+async def ngsi_ld_notify(
+    request: Request,
+    x_internal_secret: str | None = Header(None, alias="X-Internal-Service-Secret"),
+):
     """Receive NGSI-LD subscription notifications from Orion-LD.
 
     Validates payload, extracts sensor entities, and enqueues Celery tasks
@@ -117,6 +135,9 @@ async def ngsi_ld_notify(request: Request):
     notification, and three consecutive failures deactivate the subscription.
     Malformed payloads still answer 400 so the failure stays visible.
     """
+    reject = _reject_unauthenticated_notify(x_internal_secret)
+    if reject:
+        raise reject
     payload = await request.json()
     if not isinstance(payload, dict):
         return JSONResponse(status_code=400, content={"error": "invalid payload"})
