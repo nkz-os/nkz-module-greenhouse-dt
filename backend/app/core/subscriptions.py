@@ -12,12 +12,15 @@ than as an attribute key, so watchedAttributes cannot select on it.
 from __future__ import annotations
 
 import logging
+import os
 
 from nkz_platform_sdk import OrionClient
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+INTERNAL_SERVICE_SECRET = os.getenv("INTERNAL_SERVICE_SECRET", "")
 
 SUBSCRIPTION_DESCRIPTION = "nkz-module: DeviceMeasurement -> greenhouse-dt (pathological)"
 
@@ -35,6 +38,11 @@ NOTIFY_PATH = "/api/ngsi-ld/notify"
 
 
 def _subscription_body(callback_url: str) -> dict:
+    endpoint = {"uri": callback_url, "accept": "application/json"}
+    if INTERNAL_SERVICE_SECRET:
+        endpoint["receiverInfo"] = [
+            {"key": "X-Internal-Service-Secret", "value": INTERNAL_SERVICE_SECRET}
+        ]
     return {
         "type": "Subscription",
         "description": SUBSCRIPTION_DESCRIPTION,
@@ -42,7 +50,7 @@ def _subscription_body(callback_url: str) -> dict:
         "watchedAttributes": ["numValue"],
         "q": "|".join(f'controlledProperty=="{p}"' for p in TRACKED_PROPERTIES),
         "notification": {
-            "endpoint": {"uri": callback_url, "accept": "application/json"},
+            "endpoint": endpoint,
             "format": "normalized",
         },
         "throttling": 60,
