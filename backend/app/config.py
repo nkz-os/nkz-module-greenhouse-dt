@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     app_name: str = "greenhouse-dt"
+    log_level: str = "INFO"  # level for this module's own loggers; see app.logging_setup
     app_version: str = "0.1.0"
     api_prefix: str = "/api/greenhouse"
     
