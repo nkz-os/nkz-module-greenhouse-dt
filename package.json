@@ -1,0 +1,42 @@
+{
+  "name": "@nkz-os/nkz-module-greenhouse-dt",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build:module": "vite build && node tools/generate-manifest.mjs"
+  },
+  "dependencies": {
+    "@nekazari/geo-utils": "^0.1.0",
+    "@nekazari/sdk": "^1.1.4",
+    "@nekazari/ui-kit": "^1.0.0",
+    "@nekazari/viewer-kit": "^0.1.1-alpha.0",
+    "i18next": "^23.11.0",
+    "lucide-react": "^0.300.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-i18next": "^14.0.0"
+  },
+  "devDependencies": {
+    "@nekazari/module-builder": "^2.0.3",
+    "@nekazari/module-kit": "^0.7.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^14.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.0",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

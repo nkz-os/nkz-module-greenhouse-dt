@@ -1,0 +1,13 @@
+# k8s/backend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: greenhouse-dt-backend
+  namespace: nekazari
+spec:
+  selector:
+    app: greenhouse-dt-backend
+  ports:
+    - port: 8420
+      targetPort: 8420
+      name: http

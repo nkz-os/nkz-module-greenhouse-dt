@@ -1,0 +1,215 @@
+"""
+State reconstruction endpoint for greenhouse DT.
+GET /api/greenhouse/{id}/state/reconstruct
+"""
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
+
+from nkz_platform_sdk import TimescaleClient
+
+from app.config import settings
+from app.core.orion import get_orion_client
+from app.middleware.auth import get_tenant_id
+from app.services.interpolation import interpolate_to_grid
+from app.core.measurements import _measurement_urn, _zone_link_q
+from app.services.heatmap_generator import (
+    grid_to_png_bytes,
+    grid_to_cog_bytes,
+    upload_heatmap,
+    get_cached_heatmap_urls,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+VALID_VARIABLES = {"temperature", "humidity", "leafWetness", "co2", "par"}
+
+
+@router.get("/{greenhouse_id}/state/reconstruct")
+async def reconstruct_state(
+    greenhouse_id: str,
+    timestamp: str = Query(..., description="ISO8601 timestamp"),
+    variable: str = Query("temperature", description="Variable to interpolate"),
+    resolution: int = Query(50, ge=10, le=200, description="Grid cells per axis"),
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
+    """Reconstruct greenhouse state at a given timestamp.
+
+    Queries Orion-LD for sensors + TimescaleDB for historical readings,
+    interpolates spatially, generates PNG heatmap + COG, uploads to MinIO.
+    """
+    # Validate variable
+    if variable not in VALID_VARIABLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid variable '{variable}'. Valid: {', '.join(sorted(VALID_VARIABLES))}",
+        )
+
+    client = get_orion_client(tenant_id)
+    gh_urn = f"urn:ngsi-ld:AgriGreenhouse:{greenhouse_id}"
+
+    # 1. Get greenhouse entity
+    try:
+        greenhouse = client.get_entity(gh_urn)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Greenhouse {greenhouse_id} not found")
+
+    # 2. Find zones / sensors
+    zone_uris = _get_zone_uris(greenhouse)
+    sensors = _get_sensors_for_zones(client, zone_uris)
+
+    if len(sensors) < 3:
+        return {
+            "greenhouse_id": gh_urn,
+            "timestamp": timestamp,
+            "variable": variable,
+            "sensor_count": len(sensors),
+            "display_url": None,
+            "cog_url": None,
+            "bounds": None,
+            "stats": None,
+            "detail": "insufficient_sensors",
+        }
+
+    # 3. Check cache
+    cached = get_cached_heatmap_urls(
+        tenant_id=tenant_id,
+        greenhouse_id=greenhouse_id,
+        variable=variable,
+        timestamp=timestamp,
+        minio_endpoint=settings.minio_endpoint,
+        minio_bucket=settings.minio_bucket,
+        minio_access_key=settings.minio_access_key,
+        minio_secret_key=settings.minio_secret_key,
+    )
+    if cached:
+        logger.debug("Cache hit for %s/%s/%s", greenhouse_id, variable, timestamp)
+        return {
+            "greenhouse_id": gh_urn,
+            "timestamp": timestamp,
+            "variable": variable,
+            "sensor_count": len(sensors),
+            "display_url": cached["display_url"],
+            "cog_url": cached["cog_url"],
+            "bounds": cached.get("bounds"),
+            "stats": cached.get("stats"),
+            "detail": "cached",
+        }
+
+    # 4. Query TimescaleDB for sensor readings at timestamp
+    ts_client = TimescaleClient(tenant_id, base_url=settings.timeseries_reader_url)
+
+    points = []
+    for s in sensors:
+        # The timeseries store keys a reading by the DeviceMeasurement URN that
+        # produced it — one series per (device, property) — never by a bare
+        # device id. Same helper the pathological worker uses.
+        series_id = _measurement_urn(s["id"], tenant_id, variable)
+        loc = s.get("location", {}).get("value", {})
+        coords = loc.get("coordinates", [None, None])
+        try:
+            readings = await ts_client.query(
+                entity_id=series_id,
+                attribute=variable,
+                since=timestamp,
+                until=timestamp,
+                limit=1,
+            )
+        except Exception as exc:
+            logger.warning("Failed to query TS for %s: %s", series_id, exc)
+            readings = []
+
+        if readings and coords[0] is not None:
+            points.append({
+                "x": coords[0],
+                "y": coords[1],
+                "value": readings[-1]["value"],
+            })
+
+    if len(points) < 3:
+        return {
+            "greenhouse_id": gh_urn,
+            "timestamp": timestamp,
+            "variable": variable,
+            "sensor_count": len(points),
+            "display_url": None,
+            "cog_url": None,
+            "bounds": None,
+            "stats": None,
+            "detail": "insufficient_readings",
+        }
+
+    # 5. Interpolate (CPU-bound -> offload to thread)
+    grid_result = await run_in_threadpool(interpolate_to_grid, points, resolution)
+
+    if "error" in grid_result:
+        return {
+            "greenhouse_id": gh_urn,
+            "timestamp": timestamp,
+            "variable": variable,
+            "sensor_count": len(points),
+            "display_url": None,
+            "cog_url": None,
+            "bounds": None,
+            "stats": None,
+            "detail": grid_result["error"],
+        }
+
+    # 6. Generate PNG + COG (CPU-bound -> offload)
+    png_bytes = await run_in_threadpool(
+        grid_to_png_bytes, grid_result["grid"], grid_result["bounds"], variable
+    )
+    cog_bytes = await run_in_threadpool(
+        grid_to_cog_bytes, grid_result["grid"], grid_result["bounds"]
+    )
+
+    # 7. Upload to MinIO (sync I/O -> offload)
+    urls = await run_in_threadpool(
+        upload_heatmap,
+        tenant_id, greenhouse_id, variable, timestamp,
+        png_bytes, cog_bytes,
+        grid_result["bounds"], grid_result["stats"],
+        settings.minio_endpoint, settings.minio_bucket,
+        settings.minio_access_key, settings.minio_secret_key,
+    )
+
+    return {
+        "greenhouse_id": gh_urn,
+        "timestamp": timestamp,
+        "variable": variable,
+        "sensor_count": len(points),
+        **urls,
+        "bounds": grid_result["bounds"],
+        "stats": grid_result["stats"],
+        "detail": "generated",
+    }
+
+
+def _get_zone_uris(greenhouse: dict) -> list[str]:
+    """Extract zone URIs from greenhouse entity (hasAgriParcel or legacy)."""
+    has_parcel = greenhouse.get("hasAgriParcel", {})
+    if isinstance(has_parcel, dict) and has_parcel.get("type") == "Relationship":
+        objects = has_parcel.get("object", [])
+        if isinstance(objects, list):
+            return objects
+        return [objects]
+    return []
+
+
+def _get_sensors_for_zones(client, zone_uris: list[str]) -> list[dict]:
+    """Get all Device entities for given zones.
+
+    `controlledAsset` is the canonical parcel/zone link on a Device;
+    `hasAgriParcel`/`refAgriParcel` remain as fallbacks for devices provisioned
+    before the cutover.
+    """
+    sensors = []
+    for zone_uri in zone_uris:
+        sensors.extend(client.query_entities(type="Device", q=_zone_link_q(zone_uri)))
+    return sensors
