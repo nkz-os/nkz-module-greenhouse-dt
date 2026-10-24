@@ -102,3 +102,41 @@ def test_legacy_relationship_names_still_resolve():
     )
     assert resp.status_code == 204
     task.delay.assert_called_once()
+
+
+OTHER_URN = "urn:ngsi-ld:AgriParcel:acme:open-field-7"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        {"type": "Relationship", "object": [ZONE_URN, OTHER_URN]},
+        {"type": "Relationship", "object": [OTHER_URN, ZONE_URN]},
+        {"type": "Relationship", "object": [ZONE_URN]},
+        [{"type": "Relationship", "object": OTHER_URN}, {"type": "Relationship", "object": ZONE_URN}],
+        [OTHER_URN, "", "urn:ngsi-ld:null", ZONE_URN],
+        ZONE_URN,
+    ],
+    ids=["zone-first", "zone-second", "one-element-list", "list-of-relationships", "plain-list", "plain-string"],
+)
+def test_parcel_list_resolves_first_greenhouse_zone(link):
+    resp, task = _post(
+        _measurement(), device={"id": DEVICE_URN, "type": "Device", "controlledAsset": link}
+    )
+    assert resp.status_code == 204
+    task.delay.assert_called_once_with(
+        sensor_id=DEVICE_URN, greenhouse_id="gh42", tenant_id="acme"
+    )
+
+
+def test_parcel_list_without_a_zone_enqueues_nothing():
+    resp, task = _post(
+        _measurement(),
+        device={
+            "id": DEVICE_URN,
+            "type": "Device",
+            "controlledAsset": {"type": "Relationship", "object": [OTHER_URN]},
+        },
+    )
+    assert resp.status_code == 204
+    task.delay.assert_not_called()

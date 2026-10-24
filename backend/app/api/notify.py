@@ -89,6 +89,24 @@ def _greenhouse_from_zone(zone_urn: str) -> str | None:
     return None
 
 
+def _link_urns(link) -> list[str]:
+    """Normalise a Relationship value to a list of URNs.
+
+    Accepts str | {object: str | list} | a list of those. Empty strings and
+    "urn:ngsi-ld:null" are skipped; duplicates are dropped, keeping order.
+    """
+    if isinstance(link, dict):
+        link = link.get("object")
+    items = link if isinstance(link, list) else [link]
+    urns: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            item = item.get("object")
+        if isinstance(item, str) and item and item != "urn:ngsi-ld:null" and item not in urns:
+            urns.append(item)
+    return urns
+
+
 async def _resolve_greenhouse(device_urn: str, tenant_id: str) -> str | None:
     """Resolve a device's greenhouse through its zone parcel.
 
@@ -113,9 +131,14 @@ async def _resolve_greenhouse(device_urn: str, tenant_id: str) -> str | None:
         return None
     for attr in ("controlledAsset", "hasAgriParcel", "refAgriParcel"):
         link = device.get(attr)
-        target = link.get("object") if isinstance(link, dict) else link
-        if isinstance(target, str) and target:
-            return _greenhouse_from_zone(target)
+        urns = _link_urns(link)
+        if urns:
+            # A device may serve several parcels: take the first greenhouse zone.
+            for urn in urns:
+                greenhouse_id = _greenhouse_from_zone(urn)
+                if greenhouse_id:
+                    return greenhouse_id
+            return None
     return None
 
 
