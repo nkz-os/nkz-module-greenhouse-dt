@@ -210,6 +210,14 @@ def _get_sensors_for_zones(client, zone_uris: list[str]) -> list[dict]:
     before the cutover.
     """
     sensors = []
+    seen: set = set()
     for zone_uri in zone_uris:
-        sensors.extend(client.query_entities(type="Device", q=_zone_link_q(zone_uri)))
+        for sensor in client.query_entities(type="Device", q=_zone_link_q(zone_uri)):
+            # A device linked to several zones comes back once per zone
+            sid = sensor.get("id")
+            if sid is not None:
+                if sid in seen:
+                    continue
+                seen.add(sid)
+            sensors.append(sensor)
     return sensors
