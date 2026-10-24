@@ -8,6 +8,7 @@ Authenticated by X-Internal-Service-Secret (NOT tenant JWT).
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 import logging
 
@@ -44,6 +45,13 @@ async def setup_parcel(
     
     if not parcel_id or not tenant_id:
         raise HTTPException(status_code=400, detail="parcel_id and tenant_id are required")
+
+    action = body.get("action") or "activate"
+    if action not in ("activate", "deactivate", "teardown"):
+        raise HTTPException(status_code=400, detail="Invalid action")
+    # Only activation builds the greenhouse; deactivating or deleting the parcel keeps its entities.
+    if action != "activate":
+        return JSONResponse(status_code=200, content={"status": action, "parcel_id": parcel_id})
     
     client = get_orion_client(tenant_id)
     

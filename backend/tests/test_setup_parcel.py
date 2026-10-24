@@ -70,3 +70,31 @@ def test_accepts_a_bare_parcel_id(orion):
     _activate("0f3c2a1e-5b7d-4c9a-8e21-6d4f0a9b3c55")
 
     assert _target(orion.created[0]["hasAgriParcel"]) == PARCEL
+
+
+@pytest.mark.parametrize("action", ["deactivate", "teardown"])
+def test_deactivate_and_teardown_create_nothing(orion, action):
+    from app.main import app
+
+    response = TestClient(app).post(
+        "/api/internal/setup-parcel",
+        json={"parcel_id": PARCEL, "tenant_id": "tenant-a", "action": action},
+        headers={"X-Internal-Service-Secret": SECRET},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == action
+    assert orion.created == []
+
+
+def test_unknown_action_is_rejected(orion):
+    from app.main import app
+
+    response = TestClient(app).post(
+        "/api/internal/setup-parcel",
+        json={"parcel_id": PARCEL, "tenant_id": "tenant-a", "action": "explode"},
+        headers={"X-Internal-Service-Secret": SECRET},
+    )
+
+    assert response.status_code == 400
+    assert orion.created == []
