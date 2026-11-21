@@ -6,6 +6,7 @@ All endpoints require auth (X-Tenant-ID from api-gateway).
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from nkz_platform_sdk.device_measurement import read_device_measurement
 
 from app.config import settings
 from app.core.orion import get_orion_client, build_greenhouse_entity
@@ -249,8 +250,10 @@ async def get_greenhouse_alerts(
 def _readings_by_device(client, device_ids: list[str]) -> dict[str, dict]:
     """Latest reading per (device, property), from the devices' DeviceMeasurements.
 
-    A `DeviceMeasurement` names its property in `controlledProperty` (a VALUE, not
-    an attribute key) and holds the reading in `numValue`/`textValue`. Its device
+    Keyed by the reading's CHANNEL, read with ``nkz_platform_sdk.read_device_measurement``
+    (``controlledProperty`` in the legacy shape, ``name`` in the Smart Data Models shape,
+    where ``controlledProperty`` is the catalogue property shared by e.g. ``temperature``
+    and ``temperatureMax``). The reading is in `numValue`/`textValue`. Its device
     is `refDevice` — never the last segment of its own id, which is the property
     name. Later `dateObserved` wins when a device reports the same property twice.
     """
@@ -266,24 +269,11 @@ def _readings_by_device(client, device_ids: list[str]) -> dict[str, dict]:
     latest: dict[str, dict] = {}
     seen_at: dict[tuple[str, str], str] = {}
     for m in measurements or []:
-        ref = m.get("refDevice")
-        device_id = ref.get("object") if isinstance(ref, dict) else ref
-        if not isinstance(device_id, str) or not device_id:
-            continue
-
-        prop = m.get("controlledProperty")
-        name = prop.get("value") if isinstance(prop, dict) else prop
-        if not isinstance(name, str) or not name:
-            continue
-
-        value = None
-        for value_key in ("numValue", "textValue"):
-            attr = m.get(value_key)
-            candidate = attr.get("value") if isinstance(attr, dict) else attr
-            if candidate is not None:
-                value = candidate
-                break
-        if value is None:
+        reading = read_device_measurement(m)
+        device_id = reading.device_id
+        name = reading.channel
+        value = reading.value
+        if device_id is None or name is None or value is None:
             continue
 
         observed = m.get("dateObserved")

@@ -92,6 +92,28 @@ class TestReadingsByDevice:
         assert out["urn:ngsi-ld:Device:acme:d1"]["temperature"] == 23.5
         assert out["urn:ngsi-ld:Device:acme:d2"]["leafWetness"] == 1
 
+    def test_sdm_shape_keys_by_channel_not_by_property(self):
+        """SDM shape: temperature and temperatureMax share controlledProperty=temperature;
+        the window maximum must not overwrite the temperature reading."""
+        from app.api.greenhouse import _readings_by_device
+
+        def _dm(channel, statistic, value):
+            return {
+                "refDevice": {"object": "urn:ngsi-ld:Device:acme:d1"},
+                "controlledProperty": {"value": "temperature"},
+                "name": {"value": channel},
+                "measurementType": {"value": statistic},
+                "numValue": {"value": value},
+                "dateObserved": {"value": "2026-08-29T10:00:00Z"},
+            }
+
+        class _Client:
+            def query_entities(self, type, q=None, **kw):
+                return [_dm("temperature", "instant", 21.0), _dm("temperatureMax", "max", 27.0)]
+
+        out = _readings_by_device(_Client(), ["urn:ngsi-ld:Device:acme:d1"])
+        assert out["urn:ngsi-ld:Device:acme:d1"] == {"temperature": 21.0, "temperatureMax": 27.0}
+
     def test_no_devices_means_no_query_at_all(self):
         class _Exploding:
             def query_entities(self, *a, **k):

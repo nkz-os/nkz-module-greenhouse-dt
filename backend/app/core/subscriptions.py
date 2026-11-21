@@ -4,9 +4,10 @@ NGSI-LD subscription management for greenhouse-dt.
 
 Creates and ensures per-tenant subscriptions for pathological monitoring.
 One subscription per tenant (watches all DeviceMeasurement entities) —
-filtering by measured property happens in the notify handler, because a
-DeviceMeasurement names its property in `controlledProperty` (a VALUE) rather
-than as an attribute key, so watchedAttributes cannot select on it.
+filtering by channel happens in the notify handler, because a DeviceMeasurement
+names its channel as a VALUE (`controlledProperty` in the legacy shape, `name` in
+the Smart Data Models shape) rather than as an attribute key, so watchedAttributes
+cannot select on it.
 """
 
 from __future__ import annotations
@@ -37,6 +38,19 @@ TRACKED_PROPERTIES = ("leafWetness", "temperature", "relativeHumidity")
 NOTIFY_PATH = "/api/ngsi-ld/notify"
 
 
+def _tracked_channels_q() -> str:
+    """Select the tracked channels in both DeviceMeasurement shapes.
+
+    Legacy shape: the channel is in ``controlledProperty``. Smart Data Models shape: the
+    channel is in ``name`` and ``controlledProperty`` is the catalogue property, so this
+    also lets through the statistic channels of a tracked property (``temperatureMin``);
+    the notify handler keeps only exact channels (``read_device_measurement``).
+    """
+    return "|".join(
+        f'controlledProperty=="{p}"|name=="{p}"' for p in TRACKED_PROPERTIES
+    )
+
+
 def _subscription_body(callback_url: str) -> dict:
     endpoint = {"uri": callback_url, "accept": "application/json"}
     if INTERNAL_SERVICE_SECRET:
@@ -48,7 +62,7 @@ def _subscription_body(callback_url: str) -> dict:
         "description": SUBSCRIPTION_DESCRIPTION,
         "entities": [{"type": "DeviceMeasurement"}],
         "watchedAttributes": ["numValue"],
-        "q": "|".join(f'controlledProperty=="{p}"' for p in TRACKED_PROPERTIES),
+        "q": _tracked_channels_q(),
         "notification": {
             "endpoint": endpoint,
             "format": "normalized",
@@ -56,6 +70,24 @@ def _subscription_body(callback_url: str) -> dict:
         "throttling": 60,
         "isActive": True,
     }
+
+
+async def _reconcile_filter(client: OrionClient, sub: dict, tenant_id: str) -> None:
+    """Bring an existing subscription's ``q`` to the current filter, in place.
+
+    Matching by description alone would leave a tenant's subscription on an older filter
+    forever. A failure is logged and never blocks startup: the old filter keeps working
+    for the legacy shape.
+    """
+    desired = _tracked_channels_q()
+    if sub.get("q") == desired:
+        logger.info("Subscription already exists for tenant %s", tenant_id)
+        return
+    try:
+        await client.update_subscription(sub["id"], {"q": desired})
+        logger.info("Updated the pathological subscription filter for tenant %s", tenant_id)
+    except Exception as e:  # noqa: BLE001 — ensure must not fail on a filter update
+        logger.warning("Could not update the subscription filter for tenant %s: %s", tenant_id, e)
 
 
 async def ensure_pathological_subscription(tenant_id: str) -> str | None:
@@ -76,7 +108,7 @@ async def ensure_pathological_subscription(tenant_id: str) -> str | None:
                     logger.warning("Could not remove retired subscription: %s", e)
         for sub in existing:
             if sub.get("description") == SUBSCRIPTION_DESCRIPTION:
-                logger.info("Subscription already exists for tenant %s", tenant_id)
+                await _reconcile_filter(client, sub, tenant_id)
                 return None
 
         callback_url = f"http://greenhouse-bff:8430{NOTIFY_PATH}"

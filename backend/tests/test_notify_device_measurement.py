@@ -140,3 +140,31 @@ def test_parcel_list_without_a_zone_enqueues_nothing():
     )
     assert resp.status_code == 204
     task.delay.assert_not_called()
+
+
+# --- Smart Data Models shape (platform flag DEVICE_MEASUREMENT_SDM_SHAPE_ENABLED on) ---
+# `controlledProperty` becomes the catalogue property and `name` the channel. The tracked
+# name is the channel in both shapes (nkz_platform_sdk.read_device_measurement).
+
+
+def _sdm(channel, prop, statistic="instant"):
+    return _measurement(
+        id=f"urn:ngsi-ld:DeviceMeasurement:acme:gh42-temp-01:{channel}",
+        controlledProperty={"type": "Property", "value": prop},
+        name={"type": "Property", "value": channel},
+        measurementType={"type": "Property", "value": statistic},
+    )
+
+
+def test_sdm_shape_tracked_channel_enqueues():
+    resp, task = _post(_sdm("leafWetness", "leafWetness"))
+    assert resp.status_code == 204
+    task.delay.assert_called_once_with(sensor_id=DEVICE_URN, greenhouse_id="gh42", tenant_id="acme")
+
+
+def test_sdm_shape_statistic_channel_of_a_tracked_property_is_ignored():
+    """temperatureMin carries controlledProperty=temperature in the SDM shape: keying by
+    controlledProperty would evaluate a window minimum as the temperature reading."""
+    resp, task = _post(_sdm("temperatureMin", "temperature", statistic="min"))
+    assert resp.status_code == 204
+    task.delay.assert_not_called()
