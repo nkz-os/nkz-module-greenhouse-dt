@@ -6,8 +6,9 @@ Receives callbacks from Orion-LD when a DeviceMeasurement reading changes.
 Validates payload, responds 204 immediately, and enqueues a Celery task for
 pathological evaluation.
 
-A DeviceMeasurement inverts the shape the retired AgriSensor used: the measured
-property is the VALUE of `controlledProperty` (not an attribute key), the reading
+A DeviceMeasurement inverts the shape the retired AgriSensor used: the channel is a
+VALUE (`controlledProperty` in the legacy shape, `name` in the Smart Data Models
+shape; read with the SDK so both work), not an attribute key, the reading
 sits in `numValue`/`textValue`, the device is the `refDevice` relationship — NOT
 the last segment of the entity id, which is the property name — and the zone is
 one hop further, on the device's `controlledAsset`.
@@ -22,6 +23,7 @@ import os
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from nkz_platform_sdk import OrionClient
+from nkz_platform_sdk.device_measurement import read_device_measurement
 
 from app.config import settings
 from app.workers.pathological import evaluate_leaf_wetness
@@ -49,25 +51,20 @@ _TRACKED_PROPERTIES = frozenset({"leafWetness", "temperature", "relativeHumidity
 
 
 def _read_measurement(entity: dict) -> tuple[str | None, str | None]:
-    """Pull (device_urn, property_name) out of a `DeviceMeasurement`.
+    """Pull (device_urn, channel) out of a `DeviceMeasurement`.
+
+    The channel is read with ``nkz_platform_sdk.read_device_measurement``, so both stored
+    shapes give the same name: the legacy one (the channel in ``controlledProperty``) and
+    the Smart Data Models one (the channel in ``name``, the catalogue property in
+    ``controlledProperty``). Keying by ``controlledProperty`` would make a
+    ``temperatureMin`` channel look like ``temperature`` once the SDM shape is on.
 
     Returns (None, None) when either is missing — nothing safe to act on.
     """
-    ref_device = entity.get("refDevice")
-    if not isinstance(ref_device, dict):
+    reading = read_device_measurement(entity)
+    if reading.device_id is None or reading.channel is None:
         return None, None
-    device_urn = ref_device.get("object")
-    if not isinstance(device_urn, str) or not device_urn:
-        return None, None
-
-    controlled_property = entity.get("controlledProperty")
-    if not isinstance(controlled_property, dict):
-        return None, None
-    name = controlled_property.get("value")
-    if not isinstance(name, str) or not name:
-        return None, None
-
-    return device_urn, name
+    return reading.device_id, reading.channel
 
 
 def _greenhouse_from_zone(zone_urn: str) -> str | None:
@@ -178,7 +175,7 @@ async def ngsi_ld_notify(
         device_urn, prop = _read_measurement(entity)
         if device_urn is None:
             logger.debug(
-                "Skipping %s: missing refDevice or controlledProperty",
+                "Skipping %s: missing refDevice or channel",
                 entity.get("id", "<no id>"),
             )
             continue

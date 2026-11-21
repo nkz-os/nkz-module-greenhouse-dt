@@ -72,8 +72,10 @@ class TestSubscriptionScope:
 
         q = _subscription_body("http://greenhouse.example.invalid/notify")["q"]
         for prop in TRACKED_PROPERTIES:
+            # Legacy shape: the channel is in controlledProperty; SDM shape: in name.
             assert f'controlledProperty=="{prop}"' in q
-        assert q.count("|") == len(TRACKED_PROPERTIES) - 1
+            assert f'name=="{prop}"' in q
+        assert q.count("|") == 2 * len(TRACKED_PROPERTIES) - 1
 
 
 class TestLegacySubscriptionCleanup:
@@ -116,3 +118,61 @@ class TestLegacySubscriptionCleanup:
         mock_orion_cls.return_value = mock_client
 
         assert await ensure_pathological_subscription("test-tenant") == "new-1"
+
+
+class TestSubscriptionFilterReconcile:
+    """ensure() used to return as soon as the description matched, so a changed q never
+    reached the tenants that already had the subscription."""
+
+    @patch("app.core.subscriptions.OrionClient")
+    @pytest.mark.asyncio
+    async def test_outdated_filter_is_updated_in_place(self, mock_orion_cls):
+        from app.core.subscriptions import ensure_pathological_subscription
+
+        mock_client = AsyncMock()
+        mock_client.query_subscriptions.return_value = [{
+            "id": "urn:ngsi-ld:Subscription:gh",
+            "description": SUBSCRIPTION_DESCRIPTION,
+            "q": 'controlledProperty=="leafWetness"',
+        }]
+        mock_orion_cls.return_value = mock_client
+
+        assert await ensure_pathological_subscription("test-tenant") is None
+        mock_client.update_subscription.assert_awaited_once()
+        sub_id, patch_body = mock_client.update_subscription.await_args.args
+        assert sub_id == "urn:ngsi-ld:Subscription:gh"
+        assert patch_body == {"q": _subscription_body("x")["q"]}
+        mock_client.create_subscription.assert_not_called()
+
+    @patch("app.core.subscriptions.OrionClient")
+    @pytest.mark.asyncio
+    async def test_current_filter_is_left_alone(self, mock_orion_cls):
+        from app.core.subscriptions import ensure_pathological_subscription
+
+        mock_client = AsyncMock()
+        mock_client.query_subscriptions.return_value = [{
+            "id": "urn:ngsi-ld:Subscription:gh",
+            "description": SUBSCRIPTION_DESCRIPTION,
+            "q": _subscription_body("x")["q"],
+        }]
+        mock_orion_cls.return_value = mock_client
+
+        assert await ensure_pathological_subscription("test-tenant") is None
+        mock_client.update_subscription.assert_not_called()
+
+    @patch("app.core.subscriptions.OrionClient")
+    @pytest.mark.asyncio
+    async def test_update_failure_is_logged_not_raised(self, mock_orion_cls):
+        from app.core.subscriptions import ensure_pathological_subscription
+
+        mock_client = AsyncMock()
+        mock_client.query_subscriptions.return_value = [{
+            "id": "urn:ngsi-ld:Subscription:gh",
+            "description": SUBSCRIPTION_DESCRIPTION,
+            "q": "stale",
+        }]
+        mock_client.update_subscription.side_effect = RuntimeError("broker down")
+        mock_orion_cls.return_value = mock_client
+
+        assert await ensure_pathological_subscription("test-tenant") is None
+        mock_client.create_subscription.assert_not_called()
