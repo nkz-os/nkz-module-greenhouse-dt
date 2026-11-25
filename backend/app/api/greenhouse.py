@@ -3,6 +3,7 @@ Greenhouse CRUD + state API endpoints.
 All endpoints require auth (X-Tenant-ID from api-gateway).
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -19,6 +20,7 @@ from app.models.ngsi_ld import (
     AlertResponse,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -247,6 +249,37 @@ async def get_greenhouse_alerts(
     return result
 
 
+_DEVICE_BATCH_SIZE = 50
+_PAGE_SIZE = 100
+
+
+def _safe_device_ids(device_ids) -> list[str]:
+    """De-duplicated, order-preserving ids; ids that cannot be quoted safely are skipped."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for device_id in device_ids:
+        if not device_id or device_id in seen:
+            continue
+        seen.add(device_id)
+        if '"' in device_id:
+            logger.warning("Skipping device id containing a double quote: %r", device_id)
+            continue
+        out.append(device_id)
+    return out
+
+
+def _query_all_pages(client, entity_type: str, q: str) -> list[dict]:
+    """Read every page of a query; a page shorter than the page size is the last."""
+    entities: list[dict] = []
+    offset = 0
+    while True:
+        page = client.query_entities(type=entity_type, q=q, limit=_PAGE_SIZE, offset=offset) or []
+        entities.extend(page)
+        if len(page) < _PAGE_SIZE:
+            return entities
+        offset += _PAGE_SIZE
+
+
 def _readings_by_device(client, device_ids: list[str]) -> dict[str, dict]:
     """Latest reading per (device, property), from the devices' DeviceMeasurements.
 
@@ -257,14 +290,15 @@ def _readings_by_device(client, device_ids: list[str]) -> dict[str, dict]:
     is `refDevice` — never the last segment of its own id, which is the property
     name. Later `dateObserved` wins when a device reports the same property twice.
     """
-    ids = [d for d in device_ids if d]
+    ids = _safe_device_ids(device_ids)
     if not ids:
         return {}
 
-    measurements = client.query_entities(
-        type="DeviceMeasurement",
-        q="|".join(f'refDevice=="{device_id}"' for device_id in ids),
-    )
+    measurements: list[dict] = []
+    for start in range(0, len(ids), _DEVICE_BATCH_SIZE):
+        batch = ids[start:start + _DEVICE_BATCH_SIZE]
+        q = "refDevice==" + ",".join(f'"{device_id}"' for device_id in batch)
+        measurements.extend(_query_all_pages(client, "DeviceMeasurement", q))
 
     latest: dict[str, dict] = {}
     seen_at: dict[tuple[str, str], str] = {}

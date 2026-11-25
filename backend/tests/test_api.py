@@ -135,3 +135,116 @@ class TestReadingsByDevice:
                 }]
 
         assert _readings_by_device(_Client(), ["urn:ngsi-ld:Device:acme:d1"]) == {}
+
+
+class _PagingClient:
+    """Fake broker: records each request and serves `entities` honouring limit/offset."""
+
+    def __init__(self, entities_for=None):
+        self.requests = []
+        self._entities_for = entities_for or (lambda q: [])
+
+    def query_entities(self, type, q=None, limit=100, offset=0, **kw):
+        self.requests.append({"type": type, "q": q, "limit": limit, "offset": offset})
+        return self._entities_for(q)[offset:offset + limit]
+
+
+def _measurement(device, channel, value, observed="2026-08-29T10:00:00Z"):
+    return {
+        "refDevice": {"object": device},
+        "controlledProperty": {"value": channel},
+        "numValue": {"value": value},
+        "dateObserved": {"value": observed},
+    }
+
+
+def _values_in(q):
+    prefix = 'refDevice=="'
+    assert q.startswith(prefix) and q.endswith('"')
+    return q[len(prefix):-1].split('","')
+
+
+class TestReadingsByDeviceBatches:
+    def test_many_devices_use_one_comparison_and_at_most_50_values_per_request(self):
+        from app.api.greenhouse import _readings_by_device
+
+        ids = [f"urn:ngsi-ld:Device:acme:d{i}" for i in range(120)]
+        client = _PagingClient()
+        _readings_by_device(client, ids)
+
+        assert len(client.requests) == 3
+        seen = []
+        for r in client.requests:
+            assert r["type"] == "DeviceMeasurement"
+            assert "|" not in r["q"] and ";" not in r["q"]
+            assert r["q"].count("==") == 1
+            values = _values_in(r["q"])
+            assert len(values) <= 50
+            seen.extend(values)
+        assert seen == ids
+
+    def test_results_are_merged_across_batches(self):
+        from app.api.greenhouse import _readings_by_device
+
+        ids = [f"urn:ngsi-ld:Device:acme:d{i}" for i in range(60)]
+        client = _PagingClient(lambda q: [_measurement(d, "temperature", 20.0) for d in _values_in(q)])
+        out = _readings_by_device(client, ids)
+        assert set(out) == set(ids)
+
+    def test_newest_reading_wins_across_batches(self):
+        from app.api.greenhouse import _readings_by_device
+
+        ids = [f"urn:ngsi-ld:Device:acme:d{i}" for i in range(60)]
+        first, last = ids[0], ids[-1]
+
+        def entities_for(q):
+            if first in _values_in(q):
+                return [_measurement(first, "temperature", 30.0, "2026-08-29T12:00:00Z")]
+            return [_measurement(first, "temperature", 10.0, "2026-08-29T08:00:00Z")]
+
+        out = _readings_by_device(_PagingClient(entities_for), ids)
+        assert out[first]["temperature"] == 30.0
+
+    def test_every_page_of_a_batch_is_read_until_a_short_page(self):
+        from app.api.greenhouse import _readings_by_device
+
+        device = "urn:ngsi-ld:Device:acme:d1"
+        entities = [
+            _measurement(device, f"ch{i}", float(i)) for i in range(250)
+        ]
+        client = _PagingClient(lambda q: entities)
+        out = _readings_by_device(client, [device])
+
+        assert [r["offset"] for r in client.requests] == [0, 100, 200]
+        assert len(out[device]) == 250
+
+    def test_duplicate_ids_are_sent_once_in_stable_order(self):
+        from app.api.greenhouse import _readings_by_device
+
+        client = _PagingClient()
+        _readings_by_device(client, ["urn:b", "urn:a", "urn:b", "", "urn:a", "urn:c"])
+        assert [r["q"] for r in client.requests] == ['refDevice=="urn:b","urn:a","urn:c"']
+
+    def test_empty_list_makes_no_request(self):
+        from app.api.greenhouse import _readings_by_device
+
+        client = _PagingClient()
+        assert _readings_by_device(client, []) == {}
+        assert _readings_by_device(client, ["", None]) == {}
+        assert client.requests == []
+
+    def test_id_with_a_double_quote_is_skipped_with_a_warning(self, caplog):
+        from app.api.greenhouse import _readings_by_device
+
+        client = _PagingClient()
+        with caplog.at_level("WARNING"):
+            _readings_by_device(client, ['urn:bad"id', "urn:ok"])
+        assert [r["q"] for r in client.requests] == ['refDevice=="urn:ok"']
+        assert "bad" in caplog.text
+
+    def test_only_unsafe_ids_means_no_request(self):
+        from app.api.greenhouse import _readings_by_device
+
+        client = _PagingClient()
+        assert _readings_by_device(client, ['urn:bad"id']) == {}
+        assert client.requests == []
